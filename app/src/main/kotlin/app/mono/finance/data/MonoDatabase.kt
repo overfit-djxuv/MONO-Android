@@ -2,12 +2,14 @@ package app.mono.finance.data
 
 import android.content.Context
 import androidx.room.Dao
+import androidx.room.Delete
 import androidx.room.Database
 import androidx.room.Insert
 import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import app.mono.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
 /** Stage 1 surface: observe every table and insert/replace rows. Targeted queries arrive with each screen. */
@@ -29,6 +31,12 @@ interface MonoDao {
     @Query("SELECT * FROM Receipt ORDER BY createdAt DESC") fun receipts(): Flow<List<Receipt>>
 
     @Query("SELECT COUNT(*) FROM MoneyCategory") suspend fun categoryCount(): Int
+    @Query("SELECT COUNT(*) FROM Account") suspend fun accountCount(): Int
+    @Query("SELECT COUNT(*) FROM TransactionRecord") suspend fun transactionCount(): Int
+    @Query("SELECT * FROM TransactionRecord ORDER BY rowid DESC LIMIT 1") suspend fun latestTransaction(): TransactionRecord
+
+    @Delete suspend fun delete(row: TransactionRecord)
+    @Query("DELETE FROM TransactionRecord WHERE id = :id") suspend fun deleteTransaction(id: String)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(vararg row: MoneyCategory)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(vararg row: TransactionRecord)

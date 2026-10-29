@@ -2,7 +2,8 @@ package app.mono.finance
 
 import android.app.Application
 import app.mono.domain.Money
-import app.mono.finance.data.DefaultCategories
+import app.mono.domain.model.Account
+import app.mono.domain.model.DefaultCategories
 import app.mono.finance.data.MonoDatabase
 import app.mono.finance.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
@@ -34,6 +35,10 @@ class MonoApp : Application() {
                 db.dao().put(*DefaultCategories.seed().toTypedArray())
             }
             settings.markCategoriesSeeded()
+            // A fresh install gets one account so every record has somewhere to live (opening balance is editable later).
+            if (db.dao().accountCount() == 0) {
+                db.dao().put(Account(name = "Main", kindRaw = "bank", currencyCode = Money.reporting.code, createdAt = System.currentTimeMillis()))
+            }
         }
     }
 }

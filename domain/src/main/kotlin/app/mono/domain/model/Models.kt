@@ -1,4 +1,18 @@
-package app.mono.finance.data
+package app.mono.domain.model
+
+import app.mono.domain.AccountKind
+import app.mono.domain.ContributionFrequency
+import app.mono.domain.Currency
+import app.mono.domain.GoalKind
+import app.mono.domain.ListKind
+import app.mono.domain.Money
+import app.mono.domain.MonthKey
+import app.mono.domain.PaymentStatus
+import app.mono.domain.Priority
+import app.mono.domain.RecurrenceUnit
+import app.mono.domain.TripCostCategory
+import app.mono.domain.Tags
+import app.mono.domain.TxKind
 
 import androidx.room.Entity
 import androidx.room.Index
@@ -23,7 +37,9 @@ data class MoneyCategory(
     val sortOrder: Int = 0,
     /** Essential spending: its remaining budget is held back by Safe to spend. */
     val isEssential: Boolean = false,
-)
+) {
+    val kind: TxKind get() = TxKind.of(kindRaw)
+}
 
 @Entity(tableName = "TransactionRecord", indices = [Index("date"), Index("accountID"), Index("occurrenceKey")])
 data class TransactionRecord(
@@ -46,7 +62,11 @@ data class TransactionRecord(
     val tags: String = "",
     /** "<rule id>|<due date>" when this records a scheduled payment; one key can exist only once. */
     val occurrenceKey: String = "",
-)
+) {
+    val kind: TxKind get() = TxKind.of(kindRaw)
+    /** Used by Safe to spend and Insights to find a recorded occurrence. */
+    val tagList: List<String> get() = Tags.list(tags)
+}
 
 @Entity(tableName = "MonthBudget", indices = [Index("monthKey", unique = true)])
 data class MonthBudget(
@@ -89,7 +109,13 @@ data class ShoppingItem(
     val expenseID: String? = null,
     val createdAt: Long = 0,
     val purchasedAt: Long? = null,
-)
+) {
+    val priority: Priority get() = Priority.of(priorityRaw)
+    val listKind: ListKind get() = ListKind.of(listKindRaw)
+    val estimatedTotal: Long get() = quantity * estimatedCents
+    /** Actual price if known, otherwise the estimate. */
+    val effectiveTotal: Long get() = quantity * (actualCents ?: estimatedCents)
+}
 
 @Entity(tableName = "SavingsGoal")
 data class SavingsGoal(
@@ -115,7 +141,15 @@ data class SavingsGoal(
     /** Set when the goal is marked completed; money already set aside stays where it is. */
     val completedAt: Long? = null,
     val isArchived: Boolean = false,
-)
+) {
+    val kind: GoalKind get() = GoalKind.of(kindRaw)
+    val priority: Priority get() = Priority.of(priorityRaw)
+    val frequency: ContributionFrequency get() = ContributionFrequency.of(frequencyRaw)
+    /** Still counts in plans, Safe to spend and forecasts. */
+    val isOngoing: Boolean get() = !isArchived && completedAt == null
+    val currency: Currency get() = if (currencyCode.isEmpty()) Money.reporting else Currency.find(currencyCode)
+    val scheduleStart: Long get() = startDate ?: createdAt
+}
 
 /** A signed movement into (+) or out of (-) a goal. */
 @Entity(tableName = "GoalEntry", indices = [Index("goalID")])
@@ -130,7 +164,10 @@ data class GoalEntry(
     val accountID: String? = null,
     /** When the account's currency differs from the goal's: how much the account paid, in its own currency. 0 = same as amountCents. */
     val accountAmountCents: Long = 0,
-)
+) {
+    /** What leaves (or returns to) the account. */
+    val accountDelta: Long get() = if (accountAmountCents != 0L) (if (amountCents < 0) -kotlin.math.abs(accountAmountCents) else kotlin.math.abs(accountAmountCents)) else amountCents
+}
 
 @Entity(tableName = "TripCost", indices = [Index("goalID")])
 data class TripCost(
@@ -139,7 +176,9 @@ data class TripCost(
     val categoryRaw: String = "other",
     val label: String = "",
     val amountCents: Long = 0,
-)
+) {
+    val category: TripCostCategory get() = TripCostCategory.of(categoryRaw)
+}
 
 /** A schedule (subscription, bill, repeating income), not a transaction: nothing is recorded until you confirm a payment. */
 @Entity(tableName = "RecurringRule")
@@ -159,7 +198,11 @@ data class RecurringRule(
     val notes: String = "",
     val accountID: String? = null,
     val remindDaysBefore: Int = 1,
-)
+) {
+    val kind: TxKind get() = TxKind.of(kindRaw)
+    val unit: RecurrenceUnit get() = RecurrenceUnit.of(unitRaw)
+    val status: PaymentStatus get() = if (isCancelled) PaymentStatus.CANCELLED else if (isActive) PaymentStatus.ACTIVE else PaymentStatus.PAUSED
+}
 
 /** Where money lives. Balances are always in the account's own currency. */
 @Entity(tableName = "Account")
@@ -173,7 +216,10 @@ data class Account(
     /** Archived accounts are hidden from pickers but their balance still counts. */
     val isArchived: Boolean = false,
     val createdAt: Long = 0,
-)
+) {
+    val kind: AccountKind get() = AccountKind.of(kindRaw)
+    val currency: Currency get() = Currency.find(currencyCode)
+}
 
 /** 1 `fromCode` = `rateMicros / 1,000,000` `toCode`. The app never fetches rates. */
 @Entity(tableName = "ExchangeRate", indices = [Index("fromCode", "toCode", unique = true)])
