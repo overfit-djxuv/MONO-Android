@@ -48,6 +48,8 @@ dependencies {
 
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.biometric)
+    implementation(libs.androidx.exifinterface)
+    implementation(libs.mlkit.text) // the Latin-script model is bundled in the app, so reading a receipt never needs the internet
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.navigation.compose)
     implementation(libs.androidx.lifecycle.runtime)

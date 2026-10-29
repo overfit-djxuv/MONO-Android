@@ -29,12 +29,15 @@ class MonoApp : Application() {
         private set
     lateinit var reminders: ReminderScheduler
         private set
+    lateinit var receiptStore: app.mono.finance.receipts.ReceiptStore
+        private set
 
     override fun onCreate() {
         super.onCreate()
         db = MonoDatabase.open(this)
         settings = SettingsStore(this)
         repository = Repository(db)
+        receiptStore = app.mono.finance.receipts.ReceiptStore(this)
         backups = BackupManager(this)
         reminders = ReminderScheduler(this).also { it.createChannel() }
 

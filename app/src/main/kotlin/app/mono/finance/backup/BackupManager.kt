@@ -37,7 +37,9 @@ class BackupManager(private val app: MonoApp) {
 
     /** A complete, verified backup as file bytes. Throws if the backup could not be proven restorable. */
     suspend fun createBytes(kind: String, passphrase: String?, nowMillis: Long = System.currentTimeMillis()): ByteArray = withContext(Dispatchers.Default) {
-        val file = repo.snapshot(0, Money.symbol, Money.reporting.code, nowMillis)
+        val snap = repo.snapshot(0, Money.symbol, Money.reporting.code, nowMillis)
+        val photos = snap.receipts.orEmpty().mapNotNull { r -> app.receiptStore.data(r.imageFile)?.let { r.imageFile to it } }.toMap()
+        val file = snap.copy(receiptPhotos = photos)
         val bad = BackupVault.roundTripMismatches(file)
         if (bad.isNotEmpty()) throw BackupVault.VaultException(BackupVault.Code.RESTORE_CHECK_FAILED,
             "The backup didn’t pass its restore test, so it was not kept: ${bad.joinToString("; ")}")
@@ -111,6 +113,8 @@ class BackupManager(private val app: MonoApp) {
         val pass = loadPassphrase()
         saveInternal(createBytes("safety", pass), "safety", pass != null)
         repo.restore(file)
+        file.receiptPhotos.forEach { (name, bytes) -> try { app.receiptStore.store(bytes, name) } catch (e: Exception) { android.util.Log.w("MONO", "receipt photo skipped", e) } }
+        app.receiptStore.pruneOrphans(file.receipts.orEmpty().map { it.imageFile }.toSet())
         file.currencySymbol.takeIf { it.isNotBlank() }?.let { app.settings.setCurrencySymbol(if (it == Money.reporting.symbol) "" else it) }
         file.reportingCurrency?.let { app.settings.setReportingCurrency(it) }
         app.settings.markCategoriesSeeded()

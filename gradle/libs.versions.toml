@@ -17,6 +17,8 @@ androidxTestExt = "1.2.1"
 androidxTestRunner = "1.6.2"
 
 [libraries]
+androidx-exifinterface = { module = "androidx.exifinterface:exifinterface", version = "1.3.7" }
+mlkit-text = { module = "com.google.mlkit:text-recognition", version = "16.0.1" }
 androidx-biometric = { module = "androidx.biometric:biometric", version.ref = "biometric" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-activity-compose = { module = "androidx.activity:activity-compose", version.ref = "activityCompose" }

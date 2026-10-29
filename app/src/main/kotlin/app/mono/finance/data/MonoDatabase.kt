@@ -42,6 +42,7 @@ interface MonoDao {
     @Query("SELECT * FROM TransactionRecord ORDER BY rowid DESC LIMIT 1") suspend fun latestTransaction(): TransactionRecord
 
     @Delete suspend fun delete(row: TransactionRecord)
+    @Delete suspend fun delete(row: Receipt)
     @Query("DELETE FROM TransactionRecord WHERE id = :id") suspend fun deleteTransaction(id: String)
     @Query("UPDATE Receipt SET transactionID = NULL WHERE transactionID = :id") suspend fun unlinkReceipts(id: String)
     @Query("DELETE FROM TransactionRecord") suspend fun clearTransactions()

@@ -94,6 +94,7 @@ fun MainShell(vm: MonoViewModel) {
     BackHandler(enabled = stack.isNotEmpty()) { pop() }
     val config by vm.safeConfig.collectAsState()
     var openTransfer by remember { mutableStateOf(false) }
+    var scanReceipt by remember { mutableStateOf(false) }
     // A launcher shortcut's request is carried out once the app is unlocked.
     val locked by vm.locked.collectAsState()
     val pendingAction by vm.pendingAction.collectAsState()
@@ -104,7 +105,7 @@ fun MainShell(vm: MonoViewModel) {
             QuickAction.ADD_INCOME -> { stackText = ""; form = FormTarget.New(TxKind.INCOME) }
             QuickAction.TRANSFER -> { openTransfer = true; stackText = Route.ACCOUNTS.name }
             QuickAction.SAFE_TO_SPEND -> stackText = Route.SAFE.name
-            QuickAction.SCAN_RECEIPT -> stackText = Route.RECEIPTS.name
+            QuickAction.SCAN_RECEIPT -> { scanReceipt = true; stackText = Route.RECEIPTS.name }
         }
     }
     val lastBackup by vm.lastBackupAt.collectAsState()
@@ -159,7 +160,7 @@ fun MainShell(vm: MonoViewModel) {
                 Route.BACKUP -> BackupScreen(vm, ::pop)
                 Route.THEME -> app.mono.finance.ui.screens.ThemeScreen(vm, ::pop)
                 Route.CSV -> CsvImportScreen(ledger, vm, ::pop)
-                Route.RECEIPTS -> ComingSoon("Receipts", ::pop)
+                Route.RECEIPTS -> app.mono.finance.ui.screens.ReceiptsScreen(ledger, vm, startScanning = scanReceipt, onBack = { scanReceipt = false; pop() })
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {
                 AppTab.DASHBOARD -> DashboardScreen(

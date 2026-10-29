@@ -71,6 +71,18 @@ class BackupTest {
         assertEquals(file.goals, back.goals)
     }
 
+    @Test fun receiptPhotosTravelInsideTheBackupAndPathsInFileNamesAreHarmless() {
+        val photo = byteArrayOf(1, 2, 3, 4, 5, -1, -2)
+        val r = app.mono.domain.model.Receipt(id = "b0000000-0000-0000-0000-000000000001", createdAt = t0, merchant = "Shop", date = t0, totalCents = 1234, imageFile = "ABC.jpg", imageHash = "h")
+        val file = sample().copy(receipts = listOf(r), receiptPhotos = mapOf("ABC.jpg" to photo))
+        val text = BackupCodec.encode(file)
+        assertTrue("written as imageData, like the iOS backup", text.contains("\"imageData\""))
+        val back = BackupCodec.decode(text)
+        assertEquals(listOf(r), back.receipts)
+        assertTrue(back.receiptPhotos["ABC.jpg"]!!.contentEquals(photo))
+        assertTrue("a backup without photos still decodes", BackupCodec.decode(BackupCodec.encode(sample().copy(receipts = listOf(r)))).receiptPhotos.isEmpty())
+    }
+
     @Test fun datesUseTheSameTextAsIosAndWholeSecondDatesAreAccepted() {
         assertEquals("2026-10-29T13:37:28.123Z", BackupCodec.date(BackupCodec.parseDate("2026-10-29T13:37:28.123Z")))
         assertEquals(BackupCodec.parseDate("2026-10-29T13:37:28Z") + 123, BackupCodec.parseDate("2026-10-29T13:37:28.123Z"))

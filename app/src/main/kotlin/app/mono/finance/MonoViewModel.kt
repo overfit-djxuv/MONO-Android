@@ -89,6 +89,14 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // Shopping
+    val receipts: StateFlow<List<app.mono.domain.model.Receipt>> = dao.receipts().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+    val receiptStore get() = mono.receiptStore
+
+    fun saveReceipt(r: app.mono.domain.model.Receipt, transaction: TransactionRecord? = null, onDone: () -> Unit = {}) =
+        run("Couldn’t save the receipt", "Receipt saved") { repo.saveReceipt(r, transaction); onDone() }
+    fun deleteReceipt(r: app.mono.domain.model.Receipt, onDone: () -> Unit = {}) =
+        run("Couldn’t delete the receipt", "Receipt deleted") { repo.deleteReceipt(r); mono.receiptStore.delete(r.imageFile); onDone() }
+
     fun importCsv(plan: CsvImport.Plan, accountID: String?, onDone: () -> Unit = {}) {
         val cats = ledger.value?.categories ?: return
         run("Couldn’t import") {

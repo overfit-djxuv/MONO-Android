@@ -209,4 +209,16 @@ object ReceiptMatcher {
         val a = ReceiptParser.fold(new.merchant); val b = ReceiptParser.fold(e.merchant)
         a.isEmpty() || b.isEmpty() || a == b
     }
+
+    /** Expenses worth offering when attaching a receipt: same amount first, then the closest dates. */
+    fun candidates(
+        totalCents: Long, date: LocalDate, transactions: List<app.mono.domain.model.TransactionRecord>, limit: Int = 12,
+        zone: java.time.ZoneId = java.time.ZoneId.systemDefault(),
+    ): List<app.mono.domain.model.TransactionRecord> {
+        fun gap(t: app.mono.domain.model.TransactionRecord) =
+            kotlin.math.abs(java.time.temporal.ChronoUnit.DAYS.between(java.time.Instant.ofEpochMilli(t.date).atZone(zone).toLocalDate(), date))
+        return transactions.filter { it.kind == TxKind.EXPENSE }
+            .sortedWith(compareByDescending<app.mono.domain.model.TransactionRecord> { it.amountCents == totalCents }.thenBy { gap(it) })
+            .filter { it.amountCents == totalCents || gap(it) <= 7 }.take(limit)
+    }
 }

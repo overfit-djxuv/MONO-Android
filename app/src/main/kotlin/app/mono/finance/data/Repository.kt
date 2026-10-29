@@ -33,6 +33,13 @@ class Repository(private val db: MonoDatabase) {
 
     suspend fun saveTransaction(t: TransactionRecord) = dao.put(t)
 
+    /** Saves a receipt together with the expense it creates or the transaction it is attached to, all or nothing. */
+    suspend fun saveReceipt(r: app.mono.domain.model.Receipt, transaction: TransactionRecord? = null) = db.withTransaction {
+        transaction?.let { dao.put(it) }
+        dao.put(r)
+    }
+    suspend fun deleteReceipt(r: app.mono.domain.model.Receipt) = dao.delete(r)
+
     /** Adds the planned rows (and any new categories) in one transaction; nothing existing is edited or deleted. */
     suspend fun applyCsvImport(plan: CsvImport.Plan, existingCategories: List<MoneyCategory>, accountID: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Int = db.withTransaction {
         var order = (existingCategories.maxOfOrNull { it.sortOrder } ?: 0) + 1

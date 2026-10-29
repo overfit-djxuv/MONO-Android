@@ -53,6 +53,8 @@ data class BackupFile(
     val reportingCurrency: String? = null,
     val reservedFunds: List<ReservedFund>? = null,
     val receipts: List<Receipt>? = null,
+    /** Receipt photos by file name, written as `imageData` (base64) on each receipt like the iOS backup does. */
+    val receiptPhotos: Map<String, ByteArray> = emptyMap(),
 ) {
     val recordCount: Int
         get() = transactions.size + monthBudgets.size + budgetLimits.size + plannedExpenses.size + shoppingItems.size + goals.size +
@@ -148,6 +150,7 @@ object BackupCodec {
                 .put("totalCents", r.totalCents).put("taxCents", r.taxCents).put("currencyCode", r.currencyCode).put("language", r.languageRaw)
                 .put("category", r.category).put("notes", r.notes).put("ocrText", r.ocrText).put("itemsJSON", r.itemsJSON)
                 .put2("transactionID", r.transactionID).put("needsReview", r.needsReview).put("imageFile", r.imageFile).put("imageHash", r.imageHash)
+                .also { o -> f.receiptPhotos[r.imageFile]?.let { o.put("imageData", java.util.Base64.getEncoder().encodeToString(it)) } }
         })) }
     }.toString(2)
 
@@ -224,7 +227,17 @@ object BackupCodec {
             )
         } catch (e: BackupException) { throw e } catch (e: Exception) { throw BackupException("The file could not be read as a MONO backup.") }
         validate(file)
-        return file
+        val photos = HashMap<String, ByteArray>()
+        o.optJSONArray("receipts")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val r = arr.getJSONObject(i)
+                val name = r.optString("imageFile")
+                if (name.isNotEmpty() && r.has("imageData") && !r.isNull("imageData")) {
+                    try { photos[name] = java.util.Base64.getDecoder().decode(r.getString("imageData")) } catch (e: IllegalArgumentException) { throw BackupException("A receipt photo in this backup is damaged.") }
+                }
+            }
+        }
+        return if (photos.isEmpty()) file else file.copy(receiptPhotos = photos)
     }
 
     // Validation: every rule the iOS importer applies, so a damaged file is refused before anything is touched.
