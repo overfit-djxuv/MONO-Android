@@ -1,6 +1,8 @@
 package app.mono.domain
 
 import app.mono.domain.model.GoalEntry
+import app.mono.domain.model.RecurringRule
+import java.time.LocalDate
 import app.mono.domain.model.PlannedExpense
 import app.mono.domain.model.SavingsGoal
 import app.mono.domain.model.ShoppingItem
@@ -112,5 +114,79 @@ class LedgerRulesTest {
         assertNull(copy.sourceID)
         assertTrue(copy.id != original.id)
         assertNotNull(copy.id)
+    }
+}
+
+/** Port of RecordPaymentTests (Stage3Tests.swift). */
+class RecordPaymentTest {
+    private fun rule(due: Long = date(2026, 3, 5), cents: Long = 1_599, unit: String = "month") =
+        RecurringRule(title = "Netflix", amountCents = cents, kindRaw = "expense", category = "Subscriptions", dayOfMonth = 5,
+            nextMonthKey = "2026-03", nextDueDate = due, unitRaw = unit)
+
+    private fun expectError(error: LedgerError, block: () -> Unit) {
+        try { block(); fail("expected $error") } catch (e: LedgerException) { assertEquals(error, e.error) }
+    }
+
+    @Test fun confirmingCreatesOneTransactionAndMovesToTheNextPayment() {
+        val r = rule()
+        val (tx, next) = LedgerRules.recordPayment(r, date(2026, 3, 6), existing = emptyList(), zone = utc)
+        assertEquals(1_599L, tx.amountCents); assertEquals(TxKind.EXPENSE, tx.kind); assertEquals("Subscriptions", tx.category); assertEquals("Netflix", tx.title)
+        assertEquals(date(2026, 3, 6), tx.date); assertEquals("${r.id}|2026-03-05", tx.occurrenceKey)
+        assertEquals(LocalDate.of(2026, 4, 5), next.dueDate(utc)); assertEquals("2026-04", next.nextMonthKey)
+    }
+
+    @Test fun theSameOccurrenceCanNeverBeRecordedTwice() {
+        val r = rule()
+        val (tx, _) = LedgerRules.recordPayment(r, 1, existing = emptyList(), zone = utc)
+        // pretend the schedule was rewound (an edit, or a restored older copy)
+        expectError(LedgerError.ALREADY_RECORDED) { LedgerRules.recordPayment(r, 2, existing = listOf(tx), zone = utc) }
+    }
+
+    @Test fun theActualAmountAndAccountCanDifferFromThePlan() {
+        val r = rule()
+        val (tx, next) = LedgerRules.recordPayment(r, 1, amountCents = 1_750, accountID = "card", existing = emptyList(), zone = utc)
+        assertEquals(1_750L, tx.amountCents); assertEquals("card", tx.accountID); assertEquals("the plan keeps its usual amount", 1_599L, next.amountCents)
+        expectError(LedgerError.INVALID_AMOUNT) { LedgerRules.recordPayment(rule(), 1, amountCents = 0, existing = emptyList(), zone = utc) }
+    }
+
+    @Test fun skippingMovesOnWithoutRecordingAnything() {
+        assertEquals(LocalDate.of(2026, 4, 5), LedgerRules.skipPayment(rule(), utc).dueDate(utc))
+    }
+
+    @Test fun pausingAndResumingDoesNotOweWhatWasMissed() {
+        val paused = LedgerRules.pause(rule(due = date(2026, 1, 5)))
+        assertEquals(PaymentStatus.PAUSED, paused.status)
+        val resumed = LedgerRules.resume(paused, LocalDate.of(2026, 3, 20), utc)
+        assertEquals(PaymentStatus.ACTIVE, resumed.status); assertEquals(LocalDate.of(2026, 4, 5), resumed.dueDate(utc))
+    }
+
+    @Test fun cancelledPaymentsCannotBeRecordedUntilRestarted() {
+        val r = LedgerRules.cancel(rule())
+        assertEquals(PaymentStatus.CANCELLED, r.status); assertFalse(r.isActive)
+        expectError(LedgerError.CANCELLED_PAYMENT) { LedgerRules.recordPayment(r, 1, existing = emptyList(), zone = utc) }
+        expectError(LedgerError.CANCELLED_PAYMENT) { LedgerRules.skipPayment(r, utc) }
+        assertEquals(PaymentStatus.ACTIVE, LedgerRules.resume(r, LocalDate.of(2026, 3, 1), utc).status)
+    }
+
+    @Test fun aWeeklyScheduleStepsBySevenDays() {
+        val (_, next) = LedgerRules.recordPayment(rule(due = date(2026, 3, 2), unit = "week"), 1, existing = emptyList(), zone = utc)
+        assertEquals(9, next.dueDate(utc).dayOfMonth)
+    }
+
+    @Test fun rulesSavedBeforeRealDatesGetOneWithoutChangingAnythingElse() {
+        val old = RecurringRule(title = "Gym", amountCents = 8_000, kindRaw = "expense", category = "Health", dayOfMonth = 25, nextMonthKey = "2026-03")
+        assertNull(old.nextDueDate)
+        val up = LedgerRules.upgradeLegacy(old, "acct", utc)
+        assertEquals(25, up.dueDate(utc).dayOfMonth); assertEquals("acct", up.accountID)
+        assertEquals(8_000L, up.amountCents); assertEquals(PaymentStatus.ACTIVE, up.status)
+        assertEquals("idempotent", up, LedgerRules.upgradeLegacy(up, "acct", utc))
+    }
+
+    @Test fun statusesAndDueDateFallbackForLegacyRules() {
+        val r = RecurringRule(title = "x", amountCents = 1, kindRaw = "expense", category = "c", dayOfMonth = 31, nextMonthKey = "2026-02")
+        assertEquals(PaymentStatus.ACTIVE, r.status)
+        assertEquals("day 31 clamps to February's length", 28, r.dueDate(utc).dayOfMonth)
+        assertEquals(PaymentStatus.PAUSED, r.copy(isActive = false).status)
+        assertEquals(PaymentStatus.CANCELLED, r.copy(isActive = false, isCancelled = true).status)
     }
 }

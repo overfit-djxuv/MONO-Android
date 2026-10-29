@@ -3,10 +3,12 @@ package app.mono.domain
 import app.mono.domain.model.Account
 import app.mono.domain.model.GoalEntry
 import app.mono.domain.model.PlannedExpense
+import app.mono.domain.model.RecurringRule
 import app.mono.domain.model.SavingsGoal
 import app.mono.domain.model.ShoppingItem
 import app.mono.domain.model.TransactionRecord
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 
 enum class LedgerError(val text: String) {
@@ -122,5 +124,61 @@ object LedgerRules {
             goalID = goal.id, amountCents = if (withdraw) -cents else cents, date = dateMillis, note = note,
             affectsCash = affectsCash, accountID = accountID, accountAmountCents = accountAmountCents,
         )
+    }
+
+    // Subscriptions and recurring payments
+
+    private fun noon(d: LocalDate, zone: ZoneId) = d.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
+
+    /** Moves the schedule to its next payment and keeps the older `nextMonthKey` field in step with the real date. */
+    private fun withNextDue(rule: RecurringRule, due: LocalDate, zone: ZoneId): RecurringRule =
+        rule.copy(nextDueDate = noon(due, zone), nextMonthKey = MonthKey.of(due).string)
+
+    private fun advance(rule: RecurringRule, zone: ZoneId): RecurringRule = withNextDue(rule, rule.following(rule.dueDate(zone)), zone)
+
+    /**
+     * Records one due payment as a real transaction. This is the ONLY way a schedule creates money movement: nothing is deducted
+     * until you confirm. The occurrence key makes confirming the same payment twice impossible, and the schedule moves to the next
+     * payment only as part of the same change.
+     */
+    fun recordPayment(
+        rule: RecurringRule, paidOnMillis: Long, amountCents: Long? = null, accountID: String? = null,
+        existing: List<TransactionRecord>, zone: ZoneId = ZoneId.systemDefault(),
+    ): Pair<TransactionRecord, RecurringRule> {
+        if (rule.isCancelled) throw LedgerException(LedgerError.CANCELLED_PAYMENT)
+        val key = rule.occurrenceKey(rule.dueDate(zone))
+        if (existing.any { it.occurrenceKey == key }) throw LedgerException(LedgerError.ALREADY_RECORDED)
+        val cents = amountCents ?: rule.amountCents
+        if (cents !in 1..Money.MAX_CENTS) throw LedgerException(LedgerError.INVALID_AMOUNT)
+        val tx = TransactionRecord(
+            amountCents = cents, kindRaw = rule.kindRaw, category = rule.category, date = paidOnMillis, title = rule.title, notes = rule.notes,
+            accountID = accountID ?: rule.accountID, occurrenceKey = key,
+        )
+        return tx to advance(rule, zone)
+    }
+
+    /** Skips one payment (you didn't pay it, or it was waived): the schedule moves on and no transaction is created. */
+    fun skipPayment(rule: RecurringRule, zone: ZoneId = ZoneId.systemDefault()): RecurringRule {
+        if (rule.isCancelled) throw LedgerException(LedgerError.CANCELLED_PAYMENT)
+        return advance(rule, zone)
+    }
+
+    fun pause(rule: RecurringRule): RecurringRule = rule.copy(isActive = false)
+
+    /** Resumes a paused or cancelled payment from its next occurrence on or after [today]. Nothing missed in between is owed or recorded. */
+    fun resume(rule: RecurringRule, today: LocalDate, zone: ZoneId = ZoneId.systemDefault()): RecurringRule {
+        val next = SubscriptionSchedule.firstOnOrAfter(today, rule.dueDate(zone), rule.unit, rule.interval, rule.anchorDay)
+        return withNextDue(rule.copy(isCancelled = false, isActive = true), next, zone)
+    }
+
+    /** Cancels a payment. It stays in your list for history, but never comes due again and isn't counted in forecasts. */
+    fun cancel(rule: RecurringRule): RecurringRule = rule.copy(isCancelled = true, isActive = false)
+
+    /** Fills `nextDueDate` for rules saved before schedules had real dates, and gives them an account. Changes nothing else. */
+    fun upgradeLegacy(rule: RecurringRule, defaultAccountID: String?, zone: ZoneId = ZoneId.systemDefault()): RecurringRule {
+        var r = rule
+        if (r.nextDueDate == null) r = r.copy(nextDueDate = noon(r.dueDate(zone), zone))
+        if (r.accountID == null && defaultAccountID != null) r = r.copy(accountID = defaultAccountID)
+        return r
     }
 }
