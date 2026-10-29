@@ -48,12 +48,12 @@ import app.mono.finance.ui.toMillis
 import java.time.LocalDate
 
 @Composable
-fun AccountsScreen(ledger: LedgerState?, vm: MonoViewModel, onBack: () -> Unit) {
+fun AccountsScreen(ledger: LedgerState?, vm: MonoViewModel, onBack: () -> Unit, initialTransfer: Boolean = false) {
     val c = Mono.colors
     val money = LocalMoneyContext.current
     var edit by remember { mutableStateOf<Account?>(null) }
     var adding by remember { mutableStateOf(false) }
-    var transfer by remember { mutableStateOf(false) }
+    var transfer by remember { mutableStateOf(initialTransfer) }
     var rateFor by remember { mutableStateOf<String?>(null) }
     if (ledger == null) return
     val books = remember(ledger, money) { Books(ledger.accounts, ledger.rates, ledger.transactions, ledger.entries, reporting = money.reporting) }

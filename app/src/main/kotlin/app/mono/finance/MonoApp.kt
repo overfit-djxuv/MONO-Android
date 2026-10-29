@@ -7,6 +7,7 @@ import app.mono.domain.model.DefaultCategories
 import app.mono.finance.data.MonoDatabase
 import app.mono.finance.backup.BackupManager
 import app.mono.finance.data.Repository
+import app.mono.finance.notify.ReminderScheduler
 import app.mono.finance.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,6 +27,8 @@ class MonoApp : Application() {
         private set
     lateinit var backups: BackupManager
         private set
+    lateinit var reminders: ReminderScheduler
+        private set
 
     override fun onCreate() {
         super.onCreate()
@@ -33,6 +36,7 @@ class MonoApp : Application() {
         settings = SettingsStore(this)
         repository = Repository(db)
         backups = BackupManager(this)
+        reminders = ReminderScheduler(this).also { it.createChannel() }
 
         // Keep the global money formatter in step with the settings (reporting currency, symbol, Hide amounts).
         scope.launch { settings.moneyContext.collect { Money.context = it } }

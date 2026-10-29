@@ -32,6 +32,10 @@ class SettingsStore(private val context: Context) {
         val lastBackupAt = androidx.datastore.preferences.core.longPreferencesKey("lastBackupAt")
         val autoBackup = booleanPreferencesKey("autoBackup")
         val sealedPassphrase = stringPreferencesKey("backupPassphraseSealed")
+        val appLock = booleanPreferencesKey("appLockEnabled")
+        val reminders = booleanPreferencesKey("remindersEnabled")
+        val reminderHour = androidx.datastore.preferences.core.intPreferencesKey("reminderHour")
+        val quickActions = stringPreferencesKey("quickActions.v1")
     }
 
     val moneyContext: Flow<MoneyContext> = context.dataStore.data.map { p ->
@@ -57,6 +61,19 @@ class SettingsStore(private val context: Context) {
     /** What an hour of your work is worth, for the Purchase simulator's "hours of work" line. Empty means not set. */
     val hourlyRate: Flow<String> = context.dataStore.data.map { it[Keys.hourlyRateCents] ?: "" }
     suspend fun setHourlyRate(text: String) { context.dataStore.edit { it[Keys.hourlyRateCents] = text } }
+
+    // App lock and reminders. The lock setting is deliberately not part of any backup.
+
+    val appLock: Flow<Boolean> = context.dataStore.data.map { it[Keys.appLock] ?: false }
+    suspend fun setAppLock(on: Boolean) { context.dataStore.edit { it[Keys.appLock] = on } }
+    val reminders: Flow<Boolean> = context.dataStore.data.map { it[Keys.reminders] ?: false }
+    suspend fun setReminders(on: Boolean) { context.dataStore.edit { it[Keys.reminders] = on } }
+    /** The hour of day reminders arrive (default 9). */
+    val reminderHour: Flow<Int> = context.dataStore.data.map { (it[Keys.reminderHour] ?: 9).coerceIn(0, 23) }
+    suspend fun setReminderHour(h: Int) { context.dataStore.edit { it[Keys.reminderHour] = h.coerceIn(0, 23) } }
+    /** null until you change them: every action is shown. */
+    val quickActions: Flow<String?> = context.dataStore.data.map { it[Keys.quickActions] }
+    suspend fun setQuickActions(raw: String) { context.dataStore.edit { it[Keys.quickActions] = raw } }
 
     // Backup settings
 

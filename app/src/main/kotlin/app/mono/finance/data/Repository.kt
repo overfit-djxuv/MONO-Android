@@ -151,6 +151,9 @@ class Repository(private val db: MonoDatabase) {
         tx
     }
 
+    /** One consistent read of everything the screens show (used where no screen is observing). */
+    suspend fun ledgerNow(): LedgerState = dao.ledgerState().first()
+
     // Backup and restore
 
     suspend fun hasAnyRecords(): Boolean = dao.transactionCount() > 0 || dao.goalCount() > 0 || dao.shoppingCount() > 0

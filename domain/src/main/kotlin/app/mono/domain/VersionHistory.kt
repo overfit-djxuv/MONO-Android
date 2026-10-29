@@ -9,6 +9,14 @@ object VersionHistory {
 
     val releases: List<Release> = listOf(
         Release(
+            "0.4.0", "29 Oct 2026", "Lock, reminders and shortcuts",
+            notes = listOf(
+                "Lock MONO with your fingerprint, face or phone PIN. While it is on, the app is hidden from recent apps and screenshots.",
+                "Reminders for planned expenses and bills before they fall due, budget alerts at 80% and when you go over, and a monthly review notice. They stay on the phone and never record or deduct anything.",
+                "Launcher shortcuts: touch and hold the icon for Add expense, Add income, Transfer, Scan receipt or Safe to spend. A shortcut waits for the lock before opening anything.",
+            ),
+        ),
+        Release(
             "0.3.0", "29 Oct 2026", "Backup and recovery",
             notes = listOf(
                 "Back up to a file you choose, and restore from one. Backups made on an iPhone open here, and the other way round.",

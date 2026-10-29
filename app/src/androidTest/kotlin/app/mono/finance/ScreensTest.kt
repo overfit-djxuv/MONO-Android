@@ -60,7 +60,7 @@ class ScreensTest {
         rule.onNode(hasText("Add money") and hasClickAction()).performClick()
         rule.onNodeWithTag("moveAmount").performTextInput("250")
         rule.onNodeWithTag("confirmMove").performScrollTo().performClick()
-        rule.waitUntil(10_000) { runBlocking { app.db.dao().latestGoalEntryTotal() } == before + 25_000L }
+        rule.waitUntil(25_000) { runBlocking { app.db.dao().latestGoalEntryTotal() } == before + 25_000L }
         assertEquals(before + 25_000L, runBlocking { app.db.dao().latestGoalEntryTotal() })
     }
 

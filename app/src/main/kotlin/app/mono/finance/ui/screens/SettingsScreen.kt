@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -56,6 +57,9 @@ fun SettingsScreen(vm: MonoViewModel, onBack: () -> Unit, onVersionHistory: () -
             }
             Text("MONO has no internet permission: your records stay on this phone unless you share a file yourself.", color = c.inkTertiary, fontSize = 12.sp)
         }
+        SecuritySection(vm)
+        RemindersSection(vm)
+        ShortcutsSection(vm)
         Column(Modifier.fillMaxWidth().surface()) {
             SectionTitle("Your data")
             Row(Modifier.fillMaxWidth().clickableNoRipple(onBackup).padding(vertical = 10.dp)) {
@@ -95,6 +99,79 @@ fun VersionHistoryScreen(onBack: () -> Unit) {
                     Text("Fixes", color = c.inkSecondary, fontSize = 13.sp, modifier = Modifier.padding(top = 4.dp))
                     r.fixes.forEach { Text("• $it", color = c.ink, fontSize = 14.sp) }
                 }
+            }
+        }
+    }
+}
+
+@Composable
+private fun SecuritySection(vm: MonoViewModel) {
+    val c = Mono.colors
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val authenticate = app.mono.finance.security.LocalAuthenticate.current
+    val enabled by vm.lockEnabled.collectAsState()
+    var note by remember { mutableStateOf<String?>(null) }
+    Column(Modifier.fillMaxWidth().surface(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionTitle("Lock")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Lock MONO", color = c.ink, fontSize = 16.sp)
+                Text("Ask for your fingerprint, face or phone PIN each time you open it.", color = c.inkSecondary, fontSize = 12.sp)
+            }
+            Switch(checked = enabled == true, onCheckedChange = { want ->
+                if (!want) { vm.setLockEnabled(false); note = null } else {
+                    val why = app.mono.finance.security.Authenticator.unavailableReason(context)
+                    if (why != null) note = why else authenticate("Turn on the MONO lock") { ok -> if (ok) { vm.setLockEnabled(true); note = null } }
+                }
+            })
+        }
+        note?.let { Text(it, color = c.warning, fontSize = 12.sp) }
+        Text("While the lock is on, MONO’s screen is hidden from recent apps and screenshots. The lock setting is never saved in a backup.", color = c.inkTertiary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun RemindersSection(vm: MonoViewModel) {
+    val c = Mono.colors
+    val on by vm.remindersEnabled.collectAsState()
+    val hour by vm.reminderHour.collectAsState()
+    var note by remember { mutableStateOf<String?>(null) }
+    val ask = androidx.activity.compose.rememberLauncherForActivityResult(androidx.activity.result.contract.ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) { vm.setReminders(true); note = null } else note = "Notifications are off for MONO. Allow them in the phone’s settings to get reminders."
+    }
+    Column(Modifier.fillMaxWidth().surface(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        SectionTitle("Reminders")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Column(Modifier.weight(1f)) {
+                Text("Remind me", color = c.ink, fontSize = 16.sp)
+                Text("Planned expenses and bills before they fall due, budget alerts at 80% and over, and your monthly review.", color = c.inkSecondary, fontSize = 12.sp)
+            }
+            Switch(checked = on, onCheckedChange = { want ->
+                if (!want) { vm.setReminders(false); note = null }
+                else if (android.os.Build.VERSION.SDK_INT >= 33) ask.launch(android.Manifest.permission.POST_NOTIFICATIONS) else vm.setReminders(true)
+            })
+        }
+        if (on) {
+            SectionLabel("Time of day")
+            ChipRow((7..21).toList(), hour, { "%d:00".format(it) }) { vm.setReminderHour(it) }
+        }
+        note?.let { Text(it, color = c.warning, fontSize = 12.sp) }
+        Text("Notifications stay on this phone. They never record or deduct anything: confirming a payment is always your tap.", color = c.inkTertiary, fontSize = 12.sp)
+    }
+}
+
+@Composable
+private fun ShortcutsSection(vm: MonoViewModel) {
+    val c = Mono.colors
+    val raw by vm.quickActions.collectAsState()
+    val shown = app.mono.domain.QuickActionSettings.enabled(raw)
+    Column(Modifier.fillMaxWidth().surface(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        SectionTitle("Launcher shortcuts")
+        Text("Touch and hold MONO’s icon for these. Up to ${app.mono.domain.QuickActionSettings.MAX_SHOWN} show, in this order.", color = c.inkSecondary, fontSize = 12.sp)
+        app.mono.domain.QuickAction.entries.forEach { a ->
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(a.title, color = c.ink, fontSize = 16.sp, modifier = Modifier.weight(1f))
+                Switch(checked = a in shown, onCheckedChange = { vm.setQuickAction(a, it) })
             }
         }
     }

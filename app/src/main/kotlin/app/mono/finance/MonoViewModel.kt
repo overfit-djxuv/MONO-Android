@@ -5,6 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.mono.domain.LedgerException
 import app.mono.domain.MoneyContext
+import app.mono.domain.QuickAction
+import app.mono.domain.QuickActionSettings
+import app.mono.finance.notify.Shortcuts
 import app.mono.domain.MonthKey
 import app.mono.domain.SafeToSpend
 import app.mono.domain.WhatIf
@@ -32,6 +35,7 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
@@ -199,4 +203,45 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun deleteBackup(e: BackupManager.Entry) { mono.backups.delete(e); refreshBackups() }
+
+    // Reminders: kept in step with the data, the on/off switch and the hour
+
+    val remindersEnabled: StateFlow<Boolean> = mono.settings.reminders.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    val reminderHour: StateFlow<Int> = mono.settings.reminderHour.stateIn(viewModelScope, SharingStarted.Eagerly, 9)
+    fun setReminders(on: Boolean) { viewModelScope.launch { mono.settings.setReminders(on) } }
+    fun setReminderHour(h: Int) { viewModelScope.launch { mono.settings.setReminderHour(h) } }
+
+    init {
+        viewModelScope.launch {
+            kotlinx.coroutines.flow.combine(ledger, remindersEnabled, reminderHour) { l, e, h -> Triple(l, e, h) }.collectLatest { (l, e, h) ->
+                if (l == null) return@collectLatest
+                kotlinx.coroutines.delay(800) // let a burst of edits settle
+                withContext(Dispatchers.Default) { try { mono.reminders.sync(l, e, h) } catch (ex: Exception) { android.util.Log.w("MONO", "reminders", ex) } }
+            }
+        }
+    }
+
+    // Launcher shortcuts
+
+    val quickActions: StateFlow<String?> = mono.settings.quickActions.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    fun setQuickAction(a: QuickAction, on: Boolean) { viewModelScope.launch { mono.settings.setQuickActions(QuickActionSettings.toggle(quickActions.value, a, on)) } }
+    init { viewModelScope.launch { mono.settings.quickActions.collect { Shortcuts.publish(app, it) } } }
+
+    // App lock and shortcuts
+
+    /** null until the setting has loaded; the app stays hidden until then so nothing flashes before the lock. */
+    val lockEnabled: StateFlow<Boolean?> = mono.settings.appLock.map<Boolean, Boolean?> { it }.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    private val _locked = MutableStateFlow(true)
+    /** Locked at launch (until the setting says otherwise) and again whenever the app leaves the screen. */
+    val locked: StateFlow<Boolean> = kotlinx.coroutines.flow.combine(_locked, lockEnabled) { l, e -> e == null || (e && l) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    var unlocking = false
+    fun unlock() { _locked.value = false }
+    fun lockIfEnabled() { if (lockEnabled.value == true) _locked.value = true }
+    fun setLockEnabled(on: Boolean) { viewModelScope.launch { mono.settings.setAppLock(on); if (!on) _locked.value = false } }
+
+    /** An action requested from the launcher; held until the app is unlocked, so a shortcut can never open a screen with money past the lock. */
+    val pendingAction = MutableStateFlow<QuickAction?>(null)
+    fun request(a: QuickAction) { pendingAction.value = a }
+    fun takeAction(): QuickAction? = if (locked.value) null else pendingAction.value.also { pendingAction.value = null }
 }

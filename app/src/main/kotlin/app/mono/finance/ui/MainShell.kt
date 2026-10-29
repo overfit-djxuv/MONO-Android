@@ -37,6 +37,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import app.mono.domain.QuickAction
 import app.mono.domain.TxKind
 import app.mono.finance.MonoViewModel
 import app.mono.finance.ui.screens.AccountsScreen
@@ -70,7 +71,7 @@ enum class AppTab(val title: String, val icon: ImageVector) {
 /** What the add/edit sheet is doing right now. */
 private sealed interface FormTarget {
     data object None : FormTarget
-    data object New : FormTarget
+    data class New(val kind: TxKind = TxKind.EXPENSE) : FormTarget
     data class Edit(val id: String) : FormTarget
 }
 
@@ -91,6 +92,20 @@ fun MainShell(vm: MonoViewModel) {
     fun pop() { stackText = stack.dropLast(1).joinToString(",") { it.name } }
     BackHandler(enabled = stack.isNotEmpty()) { pop() }
     val config by vm.safeConfig.collectAsState()
+    var openTransfer by remember { mutableStateOf(false) }
+    // A launcher shortcut's request is carried out once the app is unlocked.
+    val locked by vm.locked.collectAsState()
+    val pendingAction by vm.pendingAction.collectAsState()
+    LaunchedEffect(locked, pendingAction) {
+        val a = vm.takeAction() ?: return@LaunchedEffect
+        when (a) {
+            QuickAction.ADD_EXPENSE -> { stackText = ""; form = FormTarget.New(TxKind.EXPENSE) }
+            QuickAction.ADD_INCOME -> { stackText = ""; form = FormTarget.New(TxKind.INCOME) }
+            QuickAction.TRANSFER -> { openTransfer = true; stackText = Route.ACCOUNTS.name }
+            QuickAction.SAFE_TO_SPEND -> stackText = Route.SAFE.name
+            QuickAction.SCAN_RECEIPT -> stackText = Route.RECEIPTS.name
+        }
+    }
     val lastBackup by vm.lastBackupAt.collectAsState()
     val ledger by vm.ledger.collectAsState()
     val money by vm.moneyContext.collectAsState()
@@ -103,7 +118,7 @@ fun MainShell(vm: MonoViewModel) {
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             if (stack.isEmpty() && (tab == AppTab.DASHBOARD || tab == AppTab.TRANSACTIONS)) {
-                FloatingActionButton(onClick = { form = FormTarget.New }, containerColor = c.primary, contentColor = c.onPrimary) {
+                FloatingActionButton(onClick = { form = FormTarget.New() }, containerColor = c.primary, contentColor = c.onPrimary) {
                     Icon(Icons.Outlined.Add, contentDescription = "Add transaction")
                 }
             }
@@ -137,15 +152,16 @@ fun MainShell(vm: MonoViewModel) {
                 Route.REVIEW -> ReviewScreen(ledger, ::pop)
                 Route.SIMULATOR -> PurchaseSimulatorScreen(ledger, vm, ::pop)
                 Route.WHATIF -> WhatIfScreen(ledger, vm, ::pop)
-                Route.ACCOUNTS -> AccountsScreen(ledger, vm, ::pop)
+                Route.ACCOUNTS -> AccountsScreen(ledger, vm, { openTransfer = false; pop() }, initialTransfer = openTransfer)
                 Route.SETTINGS -> SettingsScreen(vm, ::pop, { push(Route.HISTORY) }, { push(Route.BACKUP) })
                 Route.HISTORY -> VersionHistoryScreen(::pop)
                 Route.BACKUP -> BackupScreen(vm, ::pop)
+                Route.RECEIPTS -> ComingSoon("Receipts", ::pop)
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {
                 AppTab.DASHBOARD -> DashboardScreen(
                     ledger = ledger, hidden = money.hidden, onToggleHidden = vm::toggleHidden,
-                    onOpenTransactions = { tab = AppTab.TRANSACTIONS }, onAdd = { form = FormTarget.New },
+                    onOpenTransactions = { tab = AppTab.TRANSACTIONS }, onAdd = { form = FormTarget.New() },
                     onEdit = { form = FormTarget.Edit(it) }, onOpen = ::push, onOpenGoals = { push(Route.GOALS) }, config = config, lastBackupAt = lastBackup,
                 )
                 AppTab.TRANSACTIONS -> TransactionsScreen(ledger, onEdit = { form = FormTarget.Edit(it) })
@@ -159,9 +175,16 @@ fun MainShell(vm: MonoViewModel) {
     val l = ledger
     if (l != null) when (val f = form) {
         FormTarget.None -> {}
-        FormTarget.New -> TransactionForm(l, null, TxKind.EXPENSE, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
+        is FormTarget.New -> TransactionForm(l, null, f.kind, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
         is FormTarget.Edit -> l.transactions.firstOrNull { it.id == f.id }?.let {
             TransactionForm(l, it, it.kind, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
         } ?: run { form = FormTarget.None }
+    }
+}
+
+@Composable
+private fun ComingSoon(title: String, onBack: () -> Unit) {
+    app.mono.finance.ui.screens.ScreenFrame(title, onBack) {
+        androidx.compose.material3.Text("This screen is on its way.", color = Mono.colors.inkSecondary)
     }
 }
