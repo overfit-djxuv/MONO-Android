@@ -165,7 +165,7 @@ fun Metric(label: String, value: String, modifier: Modifier = Modifier, tint: Co
     val c = Mono.colors
     Column(modifier, verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(label, color = c.inkSecondary, fontSize = 12.sp)
-        Text(value, color = tint, fontSize = 18.sp, fontWeight = FontWeight.Medium)
+        Text(value, color = tint, fontSize = 16.sp, fontWeight = FontWeight.Medium, maxLines = 1, softWrap = false)
         if (footnote != null) Text(footnote, color = c.inkTertiary, fontSize = 11.sp)
     }
 }
