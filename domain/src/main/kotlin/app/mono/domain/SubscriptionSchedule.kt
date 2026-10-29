@@ -50,7 +50,7 @@ object SubscriptionSchedule {
         return d
     }
 
-    private fun timesPerYear(unit: RecurrenceUnit, interval: Int): BigDecimal {
+    fun timesPerYear(unit: RecurrenceUnit, interval: Int): BigDecimal {
         val n = BigDecimal(maxOf(interval, 1))
         val mc = MathContext.DECIMAL128
         return when (unit) {
