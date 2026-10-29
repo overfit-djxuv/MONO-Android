@@ -153,9 +153,10 @@ fun MainShell(vm: MonoViewModel) {
                 Route.SIMULATOR -> PurchaseSimulatorScreen(ledger, vm, ::pop)
                 Route.WHATIF -> WhatIfScreen(ledger, vm, ::pop)
                 Route.ACCOUNTS -> AccountsScreen(ledger, vm, { openTransfer = false; pop() }, initialTransfer = openTransfer)
-                Route.SETTINGS -> SettingsScreen(vm, ::pop, { push(Route.HISTORY) }, { push(Route.BACKUP) })
+                Route.SETTINGS -> SettingsScreen(vm, ::pop, { push(Route.HISTORY) }, { push(Route.BACKUP) }, { push(Route.THEME) })
                 Route.HISTORY -> VersionHistoryScreen(::pop)
                 Route.BACKUP -> BackupScreen(vm, ::pop)
+                Route.THEME -> app.mono.finance.ui.screens.ThemeScreen(vm, ::pop)
                 Route.RECEIPTS -> ComingSoon("Receipts", ::pop)
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {

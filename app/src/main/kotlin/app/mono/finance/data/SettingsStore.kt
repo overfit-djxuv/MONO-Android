@@ -11,6 +11,9 @@ import app.mono.domain.Currency
 import app.mono.domain.MoneyContext
 import app.mono.domain.SafeToSpend
 import app.mono.domain.WhatIf
+import app.mono.domain.theme.ThemeColors
+import app.mono.domain.theme.ThemePalette
+import app.mono.domain.theme.ThemeSaved
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
@@ -36,6 +39,7 @@ class SettingsStore(private val context: Context) {
         val reminders = booleanPreferencesKey("remindersEnabled")
         val reminderHour = androidx.datastore.preferences.core.intPreferencesKey("reminderHour")
         val quickActions = stringPreferencesKey("quickActions.v1")
+        val themeState = stringPreferencesKey("themeState.v1")
     }
 
     val moneyContext: Flow<MoneyContext> = context.dataStore.data.map { p ->
@@ -74,6 +78,11 @@ class SettingsStore(private val context: Context) {
     /** null until you change them: every action is shown. */
     val quickActions: Flow<String?> = context.dataStore.data.map { it[Keys.quickActions] }
     suspend fun setQuickActions(raw: String) { context.dataStore.edit { it[Keys.quickActions] = raw } }
+
+    // Theme: the same JSON shape the iPhone app writes (selected palette and your own palettes)
+
+    val theme: Flow<ThemeSaved> = context.dataStore.data.map { SettingsJson.decodeTheme(it[Keys.themeState]) }
+    suspend fun setTheme(t: ThemeSaved) { context.dataStore.edit { it[Keys.themeState] = SettingsJson.encodeTheme(t) } }
 
     // Backup settings
 
@@ -143,4 +152,27 @@ object SettingsJson {
             }.take(WhatIf.MAX_SCENARIOS)
         }
     } catch (e: Exception) { emptyList() }
+
+    private fun colors(c: ThemeColors) = JSONObject().put("primary", c.primary).put("secondary", c.secondary).put("background", c.background)
+        .put("surface", c.surface).put("accent", c.accent).put("text", c.text).apply {
+            c.secondaryText?.let { put("secondaryText", it) }; c.border?.let { put("border", it) }
+        }
+
+    private fun colors(o: JSONObject) = ThemeColors(
+        o.getInt("primary"), o.getInt("secondary"), o.getInt("background"), o.getInt("surface"), o.getInt("accent"), o.getInt("text"),
+        if (o.has("secondaryText")) o.getInt("secondaryText") else null, if (o.has("border")) o.getInt("border") else null,
+    )
+
+    fun encodeTheme(t: ThemeSaved): String = JSONObject().put("selectedID", t.selectedID).put("glass", 0.55)
+        .put("custom", JSONArray(t.custom.map { JSONObject().put("id", it.id).put("name", it.name).put("light", colors(it.light)).put("dark", colors(it.dark)) })).toString()
+
+    /** Palettes saved before the optional colours existed still load; damaged data falls back to the default theme. */
+    fun decodeTheme(text: String?): ThemeSaved = try {
+        if (text.isNullOrBlank()) ThemeSaved() else {
+            val o = JSONObject(text)
+            val a = o.optJSONArray("custom")
+            ThemeSaved(o.optString("selectedID", ThemePalette.default.id),
+                (0 until (a?.length() ?: 0)).map { val p = a!!.getJSONObject(it); ThemePalette(p.getString("id"), p.getString("name"), colors(p.getJSONObject("light")), colors(p.getJSONObject("dark"))) })
+        }
+    } catch (e: Exception) { ThemeSaved() }
 }

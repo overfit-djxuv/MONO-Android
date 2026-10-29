@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import app.mono.domain.LedgerException
 import app.mono.domain.MoneyContext
 import app.mono.domain.QuickAction
+import app.mono.domain.theme.ThemeModel
+import app.mono.domain.theme.ThemePalette
 import app.mono.domain.QuickActionSettings
 import app.mono.finance.notify.Shortcuts
 import app.mono.domain.MonthKey
@@ -220,6 +222,23 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
     }
+
+    // Theme: the saved choice plus an unsaved draft that the whole app previews
+
+    private val _theme = MutableStateFlow(ThemeModel())
+    val theme: StateFlow<ThemeModel> = _theme
+    init { viewModelScope.launch { mono.settings.theme.collect { saved -> _theme.value = ThemeModel(saved, _theme.value.draft) } } }
+    private fun change(f: (ThemeModel) -> ThemeModel, persist: Boolean = true) {
+        val next = f(_theme.value); _theme.value = next
+        if (persist) viewModelScope.launch { mono.settings.setTheme(next.saved) }
+    }
+    fun themeSelect(id: String) = change({ it.select(id) })
+    fun themeEdit(f: (ThemePalette) -> ThemePalette) = change({ it.edit(f) }, persist = false)
+    fun themeSave(name: String?) = change({ it.saveDraft(name) })
+    fun themeDiscard() = change({ it.discardDraft() }, persist = false)
+    fun themeDelete(id: String) = change({ it.delete(id) })
+    fun themeDuplicate(id: String) = change({ it.duplicate(id) })
+    fun themeReset() = change({ it.resetAll() })
 
     // Launcher shortcuts
 

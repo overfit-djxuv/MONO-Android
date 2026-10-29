@@ -38,6 +38,7 @@ class MainActivity : FragmentActivity() {
         setContent {
             val money by vm.moneyContext.collectAsState()
             val lockEnabled by vm.lockEnabled.collectAsState()
+            val theme by vm.theme.collectAsState()
             val locked by vm.locked.collectAsState()
             // Set before any screen reads Money.format, and provided as a local so screens redraw when it changes.
             Money.context = money
@@ -50,7 +51,7 @@ class MainActivity : FragmentActivity() {
                 LocalMoneyContext provides money,
                 LocalAuthenticate provides { title, done -> Authenticator.prompt(this@MainActivity, title, done) },
             ) {
-                MonoTheme {
+                MonoTheme(palette = theme.active) {
                     if (locked) {
                         LockScreen(onUnlock = ::unlock)
                         LaunchedEffect(Unit) { unlock() }
