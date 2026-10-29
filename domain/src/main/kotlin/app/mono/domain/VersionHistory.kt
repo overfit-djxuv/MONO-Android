@@ -9,6 +9,16 @@ object VersionHistory {
 
     val releases: List<Release> = listOf(
         Release(
+            "0.5.0", "29 Oct 2026", "Import, receipts and your own colours",
+            notes = listOf(
+                "Import a bank statement or spreadsheet (CSV): choose the columns, check a preview, then import. Rows already in MONO are skipped, so importing the same file twice adds nothing.",
+                "Receipts: take a photo or choose one, MONO reads it on the phone (English, Spanish, Malay; Burmese is photo and manual entry), you check it, then save it as an expense, attach it to a transaction, or keep it on its own. Photos travel inside backups.",
+                "Theme editor: pick a palette or make your own, with contrast checks and a live preview. Saved in the same shape as the iPhone app.",
+                "Transactions: switch period, search, filter by type, category, account, tag and amount, open a transaction for its details, repeat it for today, and see possible duplicates.",
+                "The transaction form now has account and merchant, recent suggestions, a duplicate warning and a shortcut to Transfer.",
+            ),
+        ),
+        Release(
             "0.4.0", "29 Oct 2026", "Lock, reminders and shortcuts",
             notes = listOf(
                 "Lock MONO with your fingerprint, face or phone PIN. While it is on, the app is hidden from recent apps and screenshots.",

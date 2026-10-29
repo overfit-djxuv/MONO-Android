@@ -13,3 +13,4 @@ keystore.properties
 *.jks
 *.keystore
 tools/local.env
+dist/
