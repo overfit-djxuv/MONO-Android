@@ -51,3 +51,7 @@ tools/release.sh                  # tests, builds, signs, verifies: dist/MONO-<v
 - `domain/` pure Kotlin: money, currency, month maths, the finance engines, CSV and receipt parsing, palettes.
 - `app/` the Android app: Room database, DataStore settings, Jetpack Compose UI, backup, reminders, lock.
 - `docs/ARCHITECTURE.md` how it fits together.
+
+## License
+
+MIT, see [LICENSE](LICENSE).
