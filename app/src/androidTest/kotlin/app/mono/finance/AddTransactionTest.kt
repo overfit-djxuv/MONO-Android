@@ -11,6 +11,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.platform.app.InstrumentationRegistry
@@ -42,7 +43,8 @@ class AddTransactionTest {
 
         rule.onNodeWithTag("amount").performTextReplacement("12.50")
         rule.onNodeWithText("Save").assertIsEnabled()
-        rule.onNodeWithText("Save").performClick()
+        rule.onNodeWithText("Save").performScrollTo().performClick() // the keyboard may cover it until it is scrolled into view
+        rule.waitUntil(5_000) { rule.onAllNodesWithText("New transaction").fetchSemanticsNodes().isEmpty() } // the sheet closes on save
 
         rule.waitUntil(10_000) { runBlocking { dao.transactionCount() } == before + 1 }
         val saved = runBlocking { dao.latestTransaction() }

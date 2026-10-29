@@ -7,6 +7,8 @@ import app.mono.domain.model.GoalEntry
 import app.mono.domain.model.MonthBudget
 import app.mono.domain.model.MoneyCategory
 import app.mono.domain.model.PlannedExpense
+import app.mono.domain.model.RecurringRule
+import app.mono.domain.model.ReservedFund
 import app.mono.domain.model.SavingsGoal
 import app.mono.domain.model.ShoppingItem
 import app.mono.domain.model.TripCost
@@ -27,15 +29,17 @@ data class LedgerState(
     val planned: List<PlannedExpense>,
     val items: List<ShoppingItem>,
     val costs: List<TripCost>,
+    val rules: List<RecurringRule>,
+    val reserved: List<ReservedFund>,
 )
 
 @Suppress("UNCHECKED_CAST")
 fun MonoDao.ledgerState(): Flow<LedgerState> = combine(
-    transactions(), categories(), accounts(), exchangeRates(), goalEntries(), goals(), monthBudgets(), budgetLimits(), plannedExpenses(), shoppingItems(), tripCosts(),
+    transactions(), categories(), accounts(), exchangeRates(), goalEntries(), goals(), monthBudgets(), budgetLimits(), plannedExpenses(), shoppingItems(), tripCosts(), recurringRules(), reservedFunds(),
 ) { a ->
     LedgerState(
         a[0] as List<TransactionRecord>, a[1] as List<MoneyCategory>, a[2] as List<Account>, a[3] as List<ExchangeRate>,
         a[4] as List<GoalEntry>, a[5] as List<SavingsGoal>, a[6] as List<MonthBudget>, a[7] as List<BudgetLimit>,
-        a[8] as List<PlannedExpense>, a[9] as List<ShoppingItem>, a[10] as List<TripCost>,
+        a[8] as List<PlannedExpense>, a[9] as List<ShoppingItem>, a[10] as List<TripCost>, a[11] as List<RecurringRule>, a[12] as List<ReservedFund>,
     )
 }

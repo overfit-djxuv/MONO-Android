@@ -6,7 +6,13 @@ import androidx.lifecycle.viewModelScope
 import app.mono.domain.LedgerException
 import app.mono.domain.MoneyContext
 import app.mono.domain.MonthKey
+import app.mono.domain.SafeToSpend
+import app.mono.domain.WhatIf
+import app.mono.domain.model.Account
 import app.mono.domain.model.BudgetLimit
+import app.mono.domain.model.ExchangeRate
+import app.mono.domain.model.RecurringRule
+import app.mono.domain.model.ReservedFund
 import app.mono.domain.model.GoalEntry
 import app.mono.domain.model.MonthBudget
 import app.mono.domain.model.PlannedExpense
@@ -34,6 +40,15 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
     val moneyContext: StateFlow<MoneyContext> =
         mono.settings.moneyContext.stateIn(viewModelScope, SharingStarted.Eagerly, MoneyContext())
 
+    val safeConfig: StateFlow<SafeToSpend.Config> = mono.settings.safeConfig.stateIn(viewModelScope, SharingStarted.Eagerly, SafeToSpend.Config())
+    val scenarios: StateFlow<List<WhatIf.Scenario>> = mono.settings.scenarios.stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val hourlyRate: StateFlow<String> = mono.settings.hourlyRate.stateIn(viewModelScope, SharingStarted.Eagerly, "")
+
+    fun setSafeConfig(c: SafeToSpend.Config) { viewModelScope.launch { mono.settings.setSafeConfig(c) } }
+    fun setHourlyRate(t: String) { viewModelScope.launch { mono.settings.setHourlyRate(t) } }
+    fun saveScenario(s: WhatIf.Scenario) { viewModelScope.launch { mono.settings.setScenarios(WhatIf.upsert(scenarios.value, s)) } }
+    fun deleteScenario(id: String) { viewModelScope.launch { mono.settings.setScenarios(scenarios.value.filter { it.id != id }) } }
+
     /** One-line messages for a snackbar: confirmations and the reason something couldn't be saved. */
     private val _messages = MutableSharedFlow<String>(extraBufferCapacity = 8)
     val messages: SharedFlow<String> = _messages
@@ -43,7 +58,10 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             try { block(); success?.let { _messages.tryEmit(it) } }
             catch (e: LedgerException) { _messages.tryEmit(e.error.text) }
-            catch (e: Exception) { _messages.tryEmit("$failure: ${e.message ?: "unexpected error"}") }
+            catch (e: Exception) {
+                android.util.Log.w("MONO", failure, e)
+                _messages.tryEmit("$failure: ${e.message ?: "unexpected error"}")
+            }
         }
     }
 
@@ -105,4 +123,32 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
             repo.moveMoney(goal, cents, withdraw, date, note, entries, affectsCash)
         }
     }
+
+    // Subscriptions and bills
+    fun saveRule(r: RecurringRule) = run("Couldn’t save") { repo.saveRule(r) }
+    fun deleteRule(r: RecurringRule) = run("Couldn’t delete") { repo.deleteRule(r) }
+    fun recordPayment(rule: RecurringRule, paidOn: Long, amountCents: Long?, accountID: String?) {
+        val existing = ledger.value?.transactions ?: return
+        run("Couldn’t record the payment", "Payment recorded") { repo.recordPayment(rule, existing, paidOn, amountCents, accountID) }
+    }
+    fun skipPayment(rule: RecurringRule) = run("Couldn’t skip", "Payment skipped") { repo.skipPayment(rule) }
+    fun pause(rule: RecurringRule) = run("Couldn’t pause", "Paused") { repo.pause(rule) }
+    fun resume(rule: RecurringRule) = run("Couldn’t resume", "Resumed") { repo.resume(rule) }
+    fun cancel(rule: RecurringRule) = run("Couldn’t cancel", "Cancelled") { repo.cancel(rule) }
+
+    // Reserved funds
+    fun saveReserved(f: ReservedFund) = run("Couldn’t save") { repo.saveReserved(f) }
+    fun deleteReserved(f: ReservedFund) = run("Couldn’t delete") { repo.deleteReserved(f) }
+
+    // Accounts, rates and transfers
+    fun saveAccount(a: Account) = run("Couldn’t save the account") { repo.saveAccount(a) }
+    fun saveRate(from: String, to: String, micros: Long) {
+        val existing = ledger.value?.rates ?: emptyList()
+        run("Couldn’t save the rate", "Rate saved") { repo.saveRate(from, to, micros, existing) }
+    }
+    fun deleteRate(r: ExchangeRate) = run("Couldn’t delete the rate") { repo.deleteRate(r) }
+    fun transfer(from: Account, to: Account, sent: Long, received: Long, date: Long, title: String, notes: String) =
+        run("Couldn’t record the transfer", "Transfer recorded") { repo.transfer(from, to, sent, received, date, title, notes) }
+    fun setReportingCurrency(code: String) { viewModelScope.launch { mono.settings.setReportingCurrency(code) } }
+    fun setCurrencySymbol(symbol: String) { viewModelScope.launch { mono.settings.setCurrencySymbol(symbol) } }
 }

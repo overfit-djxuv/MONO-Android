@@ -4,7 +4,11 @@ import androidx.room.withTransaction
 import app.mono.domain.FinanceEngine
 import app.mono.domain.LedgerRules
 import app.mono.domain.MonthKey
+import app.mono.domain.model.Account
 import app.mono.domain.model.BudgetLimit
+import app.mono.domain.model.ExchangeRate
+import app.mono.domain.model.RecurringRule
+import app.mono.domain.model.ReservedFund
 import app.mono.domain.model.GoalEntry
 import app.mono.domain.model.MonthBudget
 import app.mono.domain.model.PlannedExpense
@@ -12,6 +16,7 @@ import app.mono.domain.model.SavingsGoal
 import app.mono.domain.model.ShoppingItem
 import app.mono.domain.model.TransactionRecord
 import app.mono.domain.model.TripCost
+import java.time.LocalDate
 
 /**
  * Every write that touches more than one row runs inside one database transaction, using the pure rules in :domain,
@@ -103,5 +108,44 @@ class Repository(private val db: MonoDatabase) {
         val myCosts = costs.filter { it.goalID == goal.id }
         if (myCosts.isNotEmpty()) dao.delete(*myCosts.toTypedArray())
         dao.delete(goal)
+    }
+
+    // Subscriptions and bills
+
+    suspend fun saveRule(r: RecurringRule) = dao.put(r)
+    suspend fun deleteRule(r: RecurringRule) = dao.delete(r)
+
+    suspend fun recordPayment(rule: RecurringRule, existing: List<TransactionRecord>, paidOn: Long, amountCents: Long?, accountID: String?) =
+        db.withTransaction {
+            val (tx, next) = LedgerRules.recordPayment(rule, paidOn, amountCents, accountID, existing)
+            dao.put(tx); dao.put(next)
+            tx
+        }
+
+    suspend fun skipPayment(rule: RecurringRule) = dao.put(LedgerRules.skipPayment(rule))
+    suspend fun pause(rule: RecurringRule) = dao.put(LedgerRules.pause(rule))
+    suspend fun resume(rule: RecurringRule, today: LocalDate = LocalDate.now()) = dao.put(LedgerRules.resume(rule, today))
+    suspend fun cancel(rule: RecurringRule) = dao.put(LedgerRules.cancel(rule))
+
+    // Reserved funds
+
+    suspend fun saveReserved(f: ReservedFund) = dao.put(f)
+    suspend fun deleteReserved(f: ReservedFund) = dao.delete(f)
+
+    // Accounts, rates and transfers
+
+    suspend fun saveAccount(a: Account) = dao.put(a)
+
+    /** One rate per currency pair: saving a pair again replaces the old one. */
+    suspend fun saveRate(from: String, to: String, micros: Long, existing: List<ExchangeRate>) = db.withTransaction {
+        val old = existing.firstOrNull { it.fromCode == from && it.toCode == to }
+        dao.put((old ?: ExchangeRate(fromCode = from, toCode = to)).copy(rateMicros = micros, updatedAt = System.currentTimeMillis()))
+    }
+    suspend fun deleteRate(r: ExchangeRate) = dao.delete(r)
+
+    suspend fun transfer(from: Account, to: Account, sent: Long, received: Long, date: Long, title: String, notes: String) = db.withTransaction {
+        val tx = LedgerRules.transfer(from, to, sent, received, date, title, notes)
+        dao.put(tx)
+        tx
     }
 }

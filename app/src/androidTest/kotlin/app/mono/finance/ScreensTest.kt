@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasClickAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithTag
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.onNodeWithText
@@ -31,8 +32,8 @@ class ScreensTest {
     }
 
     private fun tab(name: String) {
-        rule.waitUntil(15_000) { rule.onAllNodesWithText(name).fetchSemanticsNodes().isNotEmpty() }
-        rule.onNode(hasText(name) and hasClickAction()).performClick()
+        rule.waitUntil(15_000) { rule.onAllNodesWithTag("tab-$name").fetchSemanticsNodes().isNotEmpty() }
+        rule.onNodeWithTag("tab-$name").performClick()
     }
 
     private fun waitFor(text: String, timeout: Long = 10_000) =
@@ -58,7 +59,7 @@ class ScreensTest {
         waitFor("Plan details")
         rule.onNode(hasText("Add money") and hasClickAction()).performClick()
         rule.onNodeWithTag("moveAmount").performTextInput("250")
-        rule.onNodeWithTag("confirmMove").performClick()
+        rule.onNodeWithTag("confirmMove").performScrollTo().performClick()
         rule.waitUntil(10_000) { runBlocking { app.db.dao().latestGoalEntryTotal() } == before + 25_000L }
         assertEquals(before + 25_000L, runBlocking { app.db.dao().latestGoalEntryTotal() })
     }

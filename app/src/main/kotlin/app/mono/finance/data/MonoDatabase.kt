@@ -37,12 +37,16 @@ interface MonoDao {
     @Query("SELECT COUNT(*) FROM SavingsGoal") suspend fun goalCount(): Int
     @Query("SELECT COALESCE(SUM(amountCents), 0) FROM GoalEntry") suspend fun latestGoalEntryTotal(): Long
     @Query("SELECT * FROM ShoppingItem WHERE name = :name LIMIT 1") suspend fun itemByName(name: String): ShoppingItem
+    @Query("SELECT * FROM RecurringRule WHERE title = :title LIMIT 1") suspend fun ruleByTitle(title: String): RecurringRule?
     @Query("SELECT COUNT(*) FROM ShoppingItem") suspend fun shoppingCount(): Int
     @Query("SELECT * FROM TransactionRecord ORDER BY rowid DESC LIMIT 1") suspend fun latestTransaction(): TransactionRecord
 
     @Delete suspend fun delete(row: TransactionRecord)
     @Query("DELETE FROM TransactionRecord WHERE id = :id") suspend fun deleteTransaction(id: String)
     @Query("UPDATE Receipt SET transactionID = NULL WHERE transactionID = :id") suspend fun unlinkReceipts(id: String)
+    @Delete suspend fun delete(row: RecurringRule)
+    @Delete suspend fun delete(row: ReservedFund)
+    @Delete suspend fun delete(row: ExchangeRate)
     @Delete suspend fun delete(row: MonthBudget)
     @Delete suspend fun delete(row: BudgetLimit)
     @Delete suspend fun delete(row: PlannedExpense)

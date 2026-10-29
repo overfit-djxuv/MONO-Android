@@ -22,6 +22,7 @@ import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.remember
@@ -32,12 +33,23 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mono.domain.TxKind
 import app.mono.finance.MonoViewModel
+import app.mono.finance.ui.screens.AccountsScreen
 import app.mono.finance.ui.screens.BudgetScreen
+import app.mono.finance.ui.screens.InsightsScreen
+import app.mono.finance.ui.screens.PurchaseSimulatorScreen
+import app.mono.finance.ui.screens.ReviewScreen
+import app.mono.finance.ui.screens.SafeToSpendScreen
+import app.mono.finance.ui.screens.SettingsScreen
+import app.mono.finance.ui.screens.SubscriptionsScreen
+import app.mono.finance.ui.screens.ToolsScreen
+import app.mono.finance.ui.screens.VersionHistoryScreen
+import app.mono.finance.ui.screens.WhatIfScreen
 import app.mono.finance.ui.screens.DashboardScreen
 import app.mono.finance.ui.screens.GoalsScreen
 import app.mono.finance.ui.screens.ShoppingScreen
@@ -65,6 +77,19 @@ private sealed interface FormTarget {
 fun MainShell(vm: MonoViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.DASHBOARD) }
     var form by remember { mutableStateOf<FormTarget>(FormTarget.None) }
+    // Screens opened from the Dashboard or Tools sit on a small stack above the tabs; Back pops one.
+    var stackText by rememberSaveable { mutableStateOf("") }
+    val stack = stackText.split(",").filter { it.isNotEmpty() }.mapNotNull { n -> Route.entries.firstOrNull { it.name == n } }
+    fun push(r: Route) {
+        when (r) {
+            Route.BUDGET -> { stackText = ""; tab = AppTab.BUDGET }
+            Route.GOALS -> { stackText = ""; tab = AppTab.GOALS }
+            else -> stackText = (stack + r).joinToString(",") { it.name }
+        }
+    }
+    fun pop() { stackText = stack.dropLast(1).joinToString(",") { it.name } }
+    BackHandler(enabled = stack.isNotEmpty()) { pop() }
+    val config by vm.safeConfig.collectAsState()
     val ledger by vm.ledger.collectAsState()
     val money by vm.moneyContext.collectAsState()
     val c = Mono.colors
@@ -75,7 +100,7 @@ fun MainShell(vm: MonoViewModel) {
         containerColor = c.bg,
         snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
-            if (tab == AppTab.DASHBOARD || tab == AppTab.TRANSACTIONS) {
+            if (stack.isEmpty() && (tab == AppTab.DASHBOARD || tab == AppTab.TRANSACTIONS)) {
                 FloatingActionButton(onClick = { form = FormTarget.New }, containerColor = c.primary, contentColor = c.onPrimary) {
                     Icon(Icons.Outlined.Add, contentDescription = "Add transaction")
                 }
@@ -85,8 +110,9 @@ fun MainShell(vm: MonoViewModel) {
             NavigationBar(containerColor = c.surface) {
                 AppTab.entries.forEach { t ->
                     NavigationBarItem(
+                        modifier = Modifier.testTag("tab-${t.title}"),
                         selected = tab == t,
-                        onClick = { tab = t },
+                        onClick = { stackText = ""; tab = t },
                         icon = { Icon(t.icon, contentDescription = t.title) },
                         label = { Text(t.title, maxLines = 1, softWrap = false, fontSize = 11.sp) },
                         colors = NavigationBarItemDefaults.colors(
@@ -100,11 +126,24 @@ fun MainShell(vm: MonoViewModel) {
         },
     ) { padding ->
         Box(Modifier.fillMaxSize().padding(padding)) {
-            when (tab) {
+            val top = stack.lastOrNull()
+            if (top != null) when (top) {
+                Route.TOOLS -> ToolsScreen(onOpen = ::push, onBack = ::pop)
+                Route.SAFE -> SafeToSpendScreen(ledger, vm, ::pop)
+                Route.SUBS -> SubscriptionsScreen(ledger, vm, ::pop)
+                Route.INSIGHTS -> InsightsScreen(ledger, ::pop)
+                Route.REVIEW -> ReviewScreen(ledger, ::pop)
+                Route.SIMULATOR -> PurchaseSimulatorScreen(ledger, vm, ::pop)
+                Route.WHATIF -> WhatIfScreen(ledger, vm, ::pop)
+                Route.ACCOUNTS -> AccountsScreen(ledger, vm, ::pop)
+                Route.SETTINGS -> SettingsScreen(vm, ::pop) { push(Route.HISTORY) }
+                Route.HISTORY -> VersionHistoryScreen(::pop)
+                Route.BUDGET, Route.GOALS -> {}
+            } else when (tab) {
                 AppTab.DASHBOARD -> DashboardScreen(
                     ledger = ledger, hidden = money.hidden, onToggleHidden = vm::toggleHidden,
                     onOpenTransactions = { tab = AppTab.TRANSACTIONS }, onAdd = { form = FormTarget.New },
-                    onEdit = { form = FormTarget.Edit(it) },
+                    onEdit = { form = FormTarget.Edit(it) }, onOpen = ::push, onOpenGoals = { push(Route.GOALS) }, config = config,
                 )
                 AppTab.TRANSACTIONS -> TransactionsScreen(ledger, onEdit = { form = FormTarget.Edit(it) })
                 AppTab.BUDGET -> BudgetScreen(ledger, vm)
