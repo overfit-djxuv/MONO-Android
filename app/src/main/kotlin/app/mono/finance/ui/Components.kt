@@ -238,29 +238,45 @@ fun CategoryBreakdownList(slices: List<Pair<String, Long>>, limit: Int = 5) {
 }
 
 @Composable
-fun TransactionRow(tx: TransactionRecord, symbol: String, modifier: Modifier = Modifier) {
+fun TransactionRow(
+    tx: TransactionRecord, symbol: String, modifier: Modifier = Modifier, accounts: List<app.mono.domain.model.Account> = emptyList(), flag: String? = null,
+) {
     val c = Mono.colors
     val zone = ZoneId.systemDefault()
     val date = Instant.ofEpochMilli(tx.date).atZone(zone).toLocalDate()
         .format(DateTimeFormatter.ofPattern("d MMM", Locale.getDefault()))
     val kind = tx.kind
+    val from = accounts.firstOrNull { it.id == tx.accountID } ?: accounts.minByOrNull { it.createdAt }
+    val to = tx.toAccountID?.let { id -> accounts.firstOrNull { it.id == id } }
+    val currency = from?.currency
+    val heading = when {
+        kind == TxKind.TRANSFER -> tx.title.ifBlank { "Transfer" }
+        tx.merchant.isNotBlank() -> tx.merchant
+        else -> tx.title.ifBlank { tx.category.ifBlank { kind.label } }
+    }
+    val sub = if (kind == TxKind.TRANSFER) listOf("${from?.name ?: "?"} → ${to?.name ?: "?"}", date)
+    else listOfNotNull(
+        tx.title.takeIf { tx.merchant.isNotBlank() && it.isNotBlank() } ?: tx.category.takeIf { it.isNotBlank() && it != heading },
+        from?.name?.takeIf { accounts.count { a -> !a.isArchived } > 1 },
+        app.mono.domain.Tags.list(tx.tags).take(3).joinToString(" ") { "#$it" }.ifEmpty { null }, date,
+    )
     Row(modifier.fillMaxWidth().padding(vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Box(Modifier.size(38.dp).clip(CircleShape).background(c.accentSoft), contentAlignment = Alignment.Center) {
             Icon(symbolIcon(if (kind == TxKind.TRANSFER) "arrow.left.arrow.right" else symbol), null, tint = c.accent, modifier = Modifier.size(20.dp))
         }
         Column(Modifier.padding(start = 12.dp).weight(1f)) {
-            val title = tx.title.ifBlank { tx.category.ifBlank { kind.label } }
-            Text(title, color = c.ink, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            Text(
-                listOf(tx.category.takeIf { it.isNotBlank() && it != title }, date).filterNotNull().joinToString(" · "),
-                color = c.inkSecondary, fontSize = 13.sp, maxLines = 1,
-            )
+            Text(heading, color = c.ink, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Text(flag ?: sub.joinToString(" · "), color = if (flag != null) c.warning else c.inkSecondary, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
         }
         val signed = when (kind) { TxKind.INCOME -> tx.amountCents; TxKind.EXPENSE -> -tx.amountCents; TxKind.TRANSFER -> tx.amountCents }
-        Text(
-            fmt(signed, signed = kind == TxKind.INCOME),
-            color = if (kind == TxKind.INCOME) c.income else c.ink,
-            style = figure(16, FontWeight.Medium),
-        )
+        Column(horizontalAlignment = Alignment.End) {
+            Text(
+                fmt(signed, signed = kind == TxKind.INCOME, currency = currency),
+                color = if (kind == TxKind.INCOME) c.income else c.ink,
+                style = figure(16, FontWeight.Medium),
+            )
+            if (kind == TxKind.TRANSFER && to != null && to.currencyCode != from?.currencyCode)
+                Text("→ " + fmt(tx.toAmountCents, currency = to.currency), color = c.inkSecondary, fontSize = 12.sp)
+        }
     }
 }

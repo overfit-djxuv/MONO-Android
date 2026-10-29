@@ -39,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mono.domain.AccountEngine
 import app.mono.domain.Currency
+import app.mono.domain.LedgerRules
 import app.mono.domain.Money
 import app.mono.domain.Tags
 import app.mono.domain.TxKind
@@ -61,17 +62,22 @@ fun TransactionForm(
     initialKind: TxKind = TxKind.EXPENSE,
     onSave: (TransactionRecord) -> Unit,
     onDelete: (String) -> Unit,
+    onTransfer: () -> Unit = {},
     onDismiss: () -> Unit,
 ) {
     val c = Mono.colors
     val zone = ZoneId.systemDefault()
-    val account = AccountEngine.defaultAccount(ledger.accounts)
-    val currency = (editing?.accountID?.let { id -> ledger.accounts.firstOrNull { it.id == id } } ?: account)?.currency ?: Money.reporting
+    val defaultAccount = AccountEngine.defaultAccount(ledger.accounts)
+    val activeAccounts = ledger.accounts.filter { !it.isArchived }.sortedWith(compareBy({ it.sortOrder }, { it.createdAt }))
+    var accountID by remember { mutableStateOf(editing?.accountID ?: defaultAccount?.id) }
+    val account = ledger.accounts.firstOrNull { it.id == accountID } ?: defaultAccount
+    val currency = account?.currency ?: Money.reporting
 
     var kind by remember { mutableStateOf(editing?.kind?.takeIf { it != TxKind.TRANSFER } ?: initialKind) }
     var amount by remember { mutableStateOf(editing?.let { Money.editable(it.amountCents, currency) } ?: "") }
     var category by remember { mutableStateOf(editing?.category ?: "") }
     var title by remember { mutableStateOf(editing?.title ?: "") }
+    var merchant by remember { mutableStateOf(editing?.merchant ?: "") }
     var notes by remember { mutableStateOf(editing?.notes ?: "") }
     var tags by remember { mutableStateOf(editing?.tags?.replace(",", ", ") ?: "") }
     var date by remember { mutableStateOf(editing?.let { Instant.ofEpochMilli(it.date).atZone(zone).toLocalDate() } ?: LocalDate.now()) }
@@ -91,6 +97,33 @@ fun TransactionForm(
                 listOf(TxKind.EXPENSE, TxKind.INCOME).forEach { k ->
                     FilterChip(selected = kind == k, onClick = { kind = k; category = "" }, label = { Text(k.label) }, colors = chipColors())
                 }
+                if (editing == null && activeAccounts.size > 1) FilterChip(selected = false, onClick = { onDismiss(); onTransfer() }, label = { Text("Transfer") }, colors = chipColors())
+            }
+
+            if (editing == null) {
+                val recent = remember(ledger.transactions, kind) {
+                    ledger.transactions.filter { it.kind == kind && (it.merchant.isNotBlank() || it.title.isNotBlank()) }.sortedByDescending { it.date }
+                        .distinctBy { (it.merchant.ifEmpty { it.title }).lowercase() }.take(6)
+                }
+                if (recent.isNotEmpty()) {
+                    Text("Recent", color = c.inkSecondary, fontSize = 13.sp)
+                    LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        items(recent, key = { it.id }) { r ->
+                            FilterChip(selected = false, label = { Text(r.merchant.ifEmpty { r.title }) }, colors = chipColors(), onClick = {
+                                title = r.title; merchant = r.merchant; category = r.category; accountID = r.accountID ?: accountID
+                                if (amount.isBlank()) amount = Money.editable(r.amountCents, ledger.accounts.firstOrNull { it.id == r.accountID }?.currency ?: currency)
+                            })
+                        }
+                    }
+                }
+            }
+            if (activeAccounts.size > 1) {
+                Text("Account", color = c.inkSecondary, fontSize = 13.sp)
+                LazyRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(activeAccounts, key = { it.id }) { a ->
+                        FilterChip(selected = account?.id == a.id, onClick = { accountID = a.id }, label = { Text(a.name) }, colors = chipColors())
+                    }
+                }
             }
 
             OutlinedTextField(
@@ -107,6 +140,8 @@ fun TransactionForm(
                 }
             }
 
+            OutlinedTextField(value = merchant, onValueChange = { merchant = it }, label = { Text("Shop or merchant (optional)") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth(), colors = fieldColors())
             OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Title (optional)") }, singleLine = true,
                 modifier = Modifier.fillMaxWidth(), colors = fieldColors())
             OutlinedTextField(value = tags, onValueChange = { tags = it }, label = { Text("Tags (optional)") }, singleLine = true,
@@ -118,13 +153,20 @@ fun TransactionForm(
                 Text(date.format(DateTimeFormatter.ofPattern("EEEE, d MMMM yyyy", Locale.getDefault())), color = c.ink)
             }
 
+            if (valid) {
+                val dup = remember(parsed, date, title, merchant, accountID, kind) {
+                    LedgerRules.possibleDuplicate(kind, parsed ?: 0, date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli(), title, merchant, account?.id, defaultAccount?.id,
+                        excluding = editing?.id, existing = ledger.transactions)
+                }
+                if (dup != null) app.mono.finance.ui.Callout("Looks like a duplicate: the same ${kind.label.lowercase()} for this amount on this day already exists. You can still save it.", app.mono.finance.ui.Tone.WARNING)
+            }
             Button(
                 enabled = valid && category.isNotBlank(),
                 onClick = {
                     val millis = date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli()
-                    val base = editing ?: TransactionRecord(accountID = account?.id)
-                    onSave(base.copy(amountCents = parsed ?: 0, kindRaw = kind.raw, category = category, date = millis,
-                        title = title.trim(), notes = notes.trim(), tags = Tags.normalize(tags)))
+                    val base = editing ?: TransactionRecord()
+                    onSave(base.copy(amountCents = parsed ?: 0, kindRaw = kind.raw, category = category, date = millis, accountID = account?.id,
+                        title = title.trim(), merchant = merchant.trim(), notes = notes.trim(), tags = Tags.normalize(tags)))
                     onDismiss()
                 },
                 modifier = Modifier.fillMaxWidth(),

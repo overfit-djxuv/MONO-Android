@@ -95,6 +95,7 @@ fun MainShell(vm: MonoViewModel) {
     val config by vm.safeConfig.collectAsState()
     var openTransfer by remember { mutableStateOf(false) }
     var scanReceipt by remember { mutableStateOf(false) }
+    var attachReceiptTo by remember { mutableStateOf<String?>(null) }
     // A launcher shortcut's request is carried out once the app is unlocked.
     val locked by vm.locked.collectAsState()
     val pendingAction by vm.pendingAction.collectAsState()
@@ -160,7 +161,7 @@ fun MainShell(vm: MonoViewModel) {
                 Route.BACKUP -> BackupScreen(vm, ::pop)
                 Route.THEME -> app.mono.finance.ui.screens.ThemeScreen(vm, ::pop)
                 Route.CSV -> CsvImportScreen(ledger, vm, ::pop)
-                Route.RECEIPTS -> app.mono.finance.ui.screens.ReceiptsScreen(ledger, vm, startScanning = scanReceipt, onBack = { scanReceipt = false; pop() })
+                Route.RECEIPTS -> app.mono.finance.ui.screens.ReceiptsScreen(ledger, vm, startScanning = scanReceipt, attachTo = attachReceiptTo, onBack = { scanReceipt = false; attachReceiptTo = null; pop() })
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {
                 AppTab.DASHBOARD -> DashboardScreen(
@@ -168,7 +169,7 @@ fun MainShell(vm: MonoViewModel) {
                     onOpenTransactions = { tab = AppTab.TRANSACTIONS }, onAdd = { form = FormTarget.New() },
                     onEdit = { form = FormTarget.Edit(it) }, onOpen = ::push, onOpenGoals = { push(Route.GOALS) }, config = config, lastBackupAt = lastBackup,
                 )
-                AppTab.TRANSACTIONS -> TransactionsScreen(ledger, onEdit = { form = FormTarget.Edit(it) })
+                AppTab.TRANSACTIONS -> TransactionsScreen(ledger, vm, onEdit = { form = FormTarget.Edit(it) }, onAttachReceipt = { attachReceiptTo = it; scanReceipt = true; push(Route.RECEIPTS) })
                 AppTab.BUDGET -> BudgetScreen(ledger, vm)
                 AppTab.GOALS -> GoalsScreen(ledger, vm)
                 AppTab.SHOPPING -> ShoppingScreen(ledger, vm)
@@ -179,7 +180,7 @@ fun MainShell(vm: MonoViewModel) {
     val l = ledger
     if (l != null) when (val f = form) {
         FormTarget.None -> {}
-        is FormTarget.New -> TransactionForm(l, null, f.kind, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
+        is FormTarget.New -> TransactionForm(l, null, f.kind, vm::saveTransaction, vm::deleteTransaction, onTransfer = { openTransfer = true; push(Route.ACCOUNTS) }) { form = FormTarget.None }
         is FormTarget.Edit -> l.transactions.firstOrNull { it.id == f.id }?.let {
             TransactionForm(l, it, it.kind, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
         } ?: run { form = FormTarget.None }

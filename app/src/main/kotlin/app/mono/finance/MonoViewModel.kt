@@ -4,6 +4,7 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import app.mono.domain.CsvImport
+import app.mono.domain.LedgerRules
 import app.mono.domain.LedgerException
 import app.mono.domain.MoneyContext
 import app.mono.domain.QuickAction
@@ -82,6 +83,8 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
 
     // Transactions
     fun saveTransaction(t: TransactionRecord) = run("Couldn’t save the transaction") { repo.saveTransaction(t) }
+    fun repeatTransaction(tx: TransactionRecord) =
+        run("Couldn’t repeat the transaction", "Repeated for today") { repo.saveTransaction(LedgerRules.repeatOf(tx, System.currentTimeMillis())) }
     fun deleteTransaction(id: String) {
         val l = ledger.value ?: return
         val tx = l.transactions.firstOrNull { it.id == id } ?: return

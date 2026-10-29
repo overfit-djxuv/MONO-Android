@@ -82,14 +82,15 @@ private sealed interface Mode {
 
 /** Every saved receipt, a scan flow (camera or gallery, read on the phone) and an editor to review before anything is saved. */
 @Composable
-fun ReceiptsScreen(ledger: LedgerState?, vm: MonoViewModel, startScanning: Boolean, onBack: () -> Unit) {
+fun ReceiptsScreen(ledger: LedgerState?, vm: MonoViewModel, startScanning: Boolean, attachTo: String? = null, onBack: () -> Unit) {
+    val attachTx = attachTo?.let { id -> ledger?.transactions?.firstOrNull { it.id == id } }
     val receipts by vm.receipts.collectAsState()
     var mode by remember { mutableStateOf<Mode>(if (startScanning) Mode.Choose else Mode.List) }
     when (val m = mode) {
         Mode.List -> ReceiptList(receipts, vm, onScan = { mode = Mode.Choose }, onOpen = { mode = Mode.Edit(it) }, onBack = onBack)
-        Mode.Choose -> ScanChooser(vm, onDraft = { mode = Mode.New(it) }, onBack = { mode = Mode.List })
-        is Mode.New -> if (ledger != null) ReceiptEditor(ledger, vm, receipts, m.draft, null) { mode = Mode.List } else ScreenFrame("Review receipt", onBack) {}
-        is Mode.Edit -> if (ledger != null) ReceiptEditor(ledger, vm, receipts, null, m.receipt) { mode = Mode.List } else ScreenFrame("Receipt", onBack) {}
+        Mode.Choose -> ScanChooser(vm, onDraft = { mode = Mode.New(it) }, onBack = { if (attachTx != null) onBack() else mode = Mode.List })
+        is Mode.New -> if (ledger != null) ReceiptEditor(ledger, vm, receipts, m.draft, null, attachTx) { if (attachTx != null) onBack() else mode = Mode.List } else ScreenFrame("Review receipt", onBack) {}
+        is Mode.Edit -> if (ledger != null) ReceiptEditor(ledger, vm, receipts, null, m.receipt, null) { mode = Mode.List } else ScreenFrame("Receipt", onBack) {}
     }
 }
 
@@ -186,7 +187,7 @@ private fun ScanChooser(vm: MonoViewModel, onDraft: (Draft) -> Unit, onBack: () 
 }
 
 @Composable
-private fun ReceiptEditor(ledger: LedgerState, vm: MonoViewModel, receipts: List<Receipt>, draft: Draft?, receipt: Receipt?, onFinish: () -> Unit) {
+private fun ReceiptEditor(ledger: LedgerState, vm: MonoViewModel, receipts: List<Receipt>, draft: Draft?, receipt: Receipt?, attachTx: TransactionRecord?, onFinish: () -> Unit) {
     val c = Mono.colors
     val store = vm.receiptStore
     val accounts = ledger.accounts.filter { !it.isArchived }.sortedBy { it.sortOrder }
@@ -197,12 +198,12 @@ private fun ReceiptEditor(ledger: LedgerState, vm: MonoViewModel, receipts: List
     var accountID by remember { mutableStateOf(linked?.accountID ?: accounts.firstOrNull { it.currencyCode == receipt?.currencyCode }?.id ?: defaultAccount?.id) }
     val account = accounts.firstOrNull { it.id == accountID } ?: defaultAccount
     val currency = account?.currency ?: Money.reporting
-    var merchant by remember { mutableStateOf(receipt?.merchant ?: draft?.parsed?.merchant ?: "") }
-    var date by remember { mutableStateOf(receipt?.date?.toLocalDate() ?: draft?.parsed?.date ?: LocalDate.now()) }
+    var merchant by remember { mutableStateOf(receipt?.merchant ?: draft?.parsed?.merchant?.ifBlank { null } ?: attachTx?.let { it.merchant.ifEmpty { it.title } } ?: "") }
+    var date by remember { mutableStateOf(receipt?.date?.toLocalDate() ?: draft?.parsed?.date ?: attachTx?.date?.toLocalDate() ?: LocalDate.now()) }
     var totalText by remember { mutableStateOf((receipt?.totalCents ?: draft?.parsed?.totalCents)?.takeIf { it > 0 }?.let { Money.editable(it, currency) } ?: "") }
     var taxText by remember { mutableStateOf((receipt?.taxCents ?: draft?.parsed?.taxCents)?.takeIf { it > 0 }?.let { Money.editable(it, currency) } ?: "") }
     var category by remember {
-        mutableStateOf(receipt?.category ?: run {
+        mutableStateOf(receipt?.category ?: attachTx?.category ?: run {
             val key = ReceiptParser.fold(draft?.parsed?.merchant.orEmpty())
             if (key.isEmpty()) "" else ledger.transactions.sortedByDescending { it.date }.firstOrNull { it.kind == TxKind.EXPENSE && ReceiptParser.fold(it.merchant) == key }?.category ?: ""
         })
@@ -290,7 +291,12 @@ private fun ReceiptEditor(ledger: LedgerState, vm: MonoViewModel, receipts: List
         }
 
         Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (linked != null) {
+            if (attachTx != null) {
+                Callout("Attaching to ${attachTx.merchant.ifEmpty { attachTx.title.ifEmpty { attachTx.category } }} · ${Money.format(attachTx.amountCents, currency = currency)} on ${attachTx.date.short()}. The transaction keeps its own amount.", Tone.INFO)
+                PrimaryButton("Attach to this transaction", modifier = Modifier.fillMaxWidth()) {
+                    write(attachTx.id, tx = if (attachTx.merchant.isEmpty() && merchant.isNotBlank()) attachTx.copy(merchant = merchant.trim()) else null)
+                }
+            } else if (linked != null) {
                 Callout("Linked to ${linked.merchant.ifEmpty { linked.title }} · ${Money.format(linked.amountCents, currency = currency)} on ${linked.date.short()}.", Tone.INFO)
                 PrimaryButton("Save changes", modifier = Modifier.fillMaxWidth()) { write(null) }
                 SecondaryButton("Unlink from transaction", Modifier.fillMaxWidth()) { write(null, unlink = true) }
