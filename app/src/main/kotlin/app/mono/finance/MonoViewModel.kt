@@ -20,13 +20,19 @@ import app.mono.domain.model.SavingsGoal
 import app.mono.domain.model.ShoppingItem
 import app.mono.domain.model.TransactionRecord
 import app.mono.domain.model.TripCost
+import app.mono.finance.backup.BackupFile
+import app.mono.finance.backup.BackupManager
 import app.mono.finance.data.LedgerState
 import app.mono.finance.data.Repository
 import app.mono.finance.data.ledgerState
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
@@ -34,7 +40,7 @@ import kotlinx.coroutines.launch
 class MonoViewModel(app: Application) : AndroidViewModel(app) {
     private val mono = app as MonoApp
     private val dao = mono.db.dao()
-    private val repo = Repository(mono.db)
+    private val repo = mono.repository
 
     val ledger: StateFlow<LedgerState?> = dao.ledgerState().stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), null)
     val moneyContext: StateFlow<MoneyContext> =
@@ -151,4 +157,46 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
         run("Couldn’t record the transfer", "Transfer recorded") { repo.transfer(from, to, sent, received, date, title, notes) }
     fun setReportingCurrency(code: String) { viewModelScope.launch { mono.settings.setReportingCurrency(code) } }
     fun setCurrencySymbol(symbol: String) { viewModelScope.launch { mono.settings.setCurrencySymbol(symbol) } }
+
+    // Backup and restore
+
+    val lastBackupAt: StateFlow<Long> = mono.settings.lastBackupAt.stateIn(viewModelScope, SharingStarted.Eagerly, 0L)
+    val autoBackup: StateFlow<Boolean> = mono.settings.autoBackup.stateIn(viewModelScope, SharingStarted.Eagerly, true)
+    val hasPassphrase: StateFlow<Boolean> = mono.settings.sealedPassphrase.map { it.isNotBlank() }.stateIn(viewModelScope, SharingStarted.Eagerly, false)
+    private val _entries = MutableStateFlow<List<BackupManager.Entry>>(emptyList())
+    val backupEntries: StateFlow<List<BackupManager.Entry>> = _entries
+    fun refreshBackups() { viewModelScope.launch(Dispatchers.IO) { _entries.value = mono.backups.list() } }
+    fun setAutoBackup(on: Boolean) { viewModelScope.launch { mono.settings.setAutoBackup(on) } }
+
+    fun setPassphrase(pass: String?) = run("Couldn’t save the passphrase", if (pass.isNullOrEmpty()) "Passphrase removed" else "Passphrase saved") {
+        if (pass.isNullOrEmpty()) mono.backups.clearPassphrase() else mono.backups.savePassphrase(pass)
+    }
+
+    /** Builds a verified backup (encrypted if a passphrase is saved) for the caller to write to a file the user picks. */
+    fun prepareExport(onReady: (ByteArray, String) -> Unit) {
+        viewModelScope.launch {
+            try {
+                val pass = mono.backups.loadPassphrase()
+                val bytes = mono.backups.createBytes("manual", pass)
+                onReady(bytes, mono.backups.suggestedName(encrypted = pass != null))
+            } catch (e: Exception) { _messages.tryEmit(e.message ?: "The backup couldn’t be made.") }
+        }
+    }
+
+    fun markExported() { viewModelScope.launch { mono.settings.setLastBackupAt(System.currentTimeMillis()); _messages.tryEmit("Backup saved") } }
+
+    fun backupNowInApp() = run("The backup couldn’t be made", "Backup saved in the app") {
+        val pass = mono.backups.loadPassphrase()
+        mono.backups.saveInternal(mono.backups.createBytes("manual", pass), "manual", pass != null)
+        _entries.value = mono.backups.list()
+    }
+
+    suspend fun inspectBackup(bytes: ByteArray, passphrase: String?): BackupManager.Opened = withContext(Dispatchers.Default) { mono.backups.inspect(bytes, passphrase) }
+
+    fun restoreBackup(file: BackupFile) = run("The backup couldn’t be restored", "Backup restored") {
+        mono.backups.restore(file)
+        _entries.value = mono.backups.list()
+    }
+
+    fun deleteBackup(e: BackupManager.Entry) { mono.backups.delete(e); refreshBackups() }
 }

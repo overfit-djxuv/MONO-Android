@@ -33,7 +33,10 @@ private val tryIt = listOf(
     Tool(Route.SIMULATOR, "What a purchase would do before you buy it"),
     Tool(Route.WHATIF, "Try an idea on paper; nothing is changed"),
 )
-private val app = listOf(Tool(Route.SETTINGS, "Currency, privacy and more"))
+private val app = listOf(
+    Tool(Route.BACKUP, "Save a copy, restore, and protect it with a passphrase"),
+    Tool(Route.SETTINGS, "Currency, privacy and more"),
+)
 
 @Composable
 fun ToolsScreen(onOpen: (Route) -> Unit, onBack: () -> Unit) {

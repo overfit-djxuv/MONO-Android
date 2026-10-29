@@ -1,6 +1,8 @@
 package app.mono.finance.data
 
 import androidx.room.withTransaction
+import app.mono.finance.backup.BackupFile
+import kotlinx.coroutines.flow.first
 import app.mono.domain.FinanceEngine
 import app.mono.domain.LedgerRules
 import app.mono.domain.MonthKey
@@ -147,5 +149,47 @@ class Repository(private val db: MonoDatabase) {
         val tx = LedgerRules.transfer(from, to, sent, received, date, title, notes)
         dao.put(tx)
         tx
+    }
+
+    // Backup and restore
+
+    suspend fun hasAnyRecords(): Boolean = dao.transactionCount() > 0 || dao.goalCount() > 0 || dao.shoppingCount() > 0
+
+    /** Reads every table into one backup structure (the same data the iOS backup holds). */
+    suspend fun snapshot(openingBalanceCents: Long, currencySymbol: String, reportingCurrency: String, nowMillis: Long): BackupFile = db.withTransaction {
+        BackupFile(
+            exportedAt = nowMillis, openingBalanceCents = openingBalanceCents, currencySymbol = currencySymbol,
+            categories = dao.categories().first(), transactions = dao.transactions().first().sortedBy { it.date },
+            monthBudgets = dao.monthBudgets().first(), budgetLimits = dao.budgetLimits().first(), plannedExpenses = dao.plannedExpenses().first(),
+            shoppingItems = dao.shoppingItems().first(), goals = dao.goals().first(), goalEntries = dao.goalEntries().first().sortedBy { it.date },
+            tripCosts = dao.tripCosts().first(), recurringRules = dao.recurringRules().first(), accounts = dao.accounts().first(),
+            exchangeRates = dao.exchangeRates().first(), reportingCurrency = reportingCurrency, reservedFunds = dao.reservedFunds().first(),
+            receipts = dao.receipts().first(),
+        )
+    }
+
+    /**
+     * Replaces every record with the file's, all or nothing: if anything fails, the transaction rolls back and nothing changes.
+     * A file with no accounts (an old backup) gets a Main account holding its opening balance, so no record is left without one.
+     */
+    suspend fun restore(file: BackupFile, nowMillis: Long = System.currentTimeMillis()) = db.withTransaction {
+        dao.clearTransactions(); dao.clearMonthBudgets(); dao.clearBudgetLimits(); dao.clearPlanned(); dao.clearShopping(); dao.clearGoalEntries()
+        dao.clearTripCosts(); dao.clearGoals(); dao.clearRules(); dao.clearAccounts(); dao.clearRates(); dao.clearReserved(); dao.clearCategories(); dao.clearReceipts()
+        val accounts = file.accounts?.takeIf { it.isNotEmpty() }
+            ?: listOf(Account(name = "Main", kindRaw = "bank", currencyCode = file.reportingCurrency ?: "MYR", openingCents = file.openingBalanceCents, createdAt = nowMillis))
+        dao.put(*accounts.toTypedArray())
+        file.exchangeRates?.let { dao.put(*it.map { r -> r.copy(pk = 0) }.toTypedArray()) }
+        file.reservedFunds?.let { dao.put(*it.toTypedArray()) }
+        dao.put(*file.categories.map { it.copy(pk = 0) }.toTypedArray())
+        dao.put(*file.transactions.toTypedArray())
+        dao.put(*file.monthBudgets.map { it.copy(pk = 0) }.toTypedArray())
+        dao.put(*file.budgetLimits.map { it.copy(pk = 0) }.toTypedArray())
+        dao.put(*file.plannedExpenses.toTypedArray())
+        dao.put(*file.shoppingItems.toTypedArray())
+        dao.put(*file.goals.toTypedArray())
+        dao.put(*file.goalEntries.toTypedArray())
+        dao.put(*file.tripCosts.toTypedArray())
+        file.recurringRules?.let { dao.put(*it.toTypedArray()) }
+        file.receipts?.let { dao.put(*it.toTypedArray()) }
     }
 }

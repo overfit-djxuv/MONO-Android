@@ -14,6 +14,7 @@ import app.mono.domain.WhatIf
 import org.json.JSONArray
 import org.json.JSONObject
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 
 private val Context.dataStore: DataStore<Preferences> by preferencesDataStore(name = "settings")
@@ -28,6 +29,9 @@ class SettingsStore(private val context: Context) {
         val safeConfig = stringPreferencesKey("safeToSpendConfig.v1")
         val scenarios = stringPreferencesKey("whatIfScenarios.v1")
         val hourlyRateCents = stringPreferencesKey("hourlyRateCents")
+        val lastBackupAt = androidx.datastore.preferences.core.longPreferencesKey("lastBackupAt")
+        val autoBackup = booleanPreferencesKey("autoBackup")
+        val sealedPassphrase = stringPreferencesKey("backupPassphraseSealed")
     }
 
     val moneyContext: Flow<MoneyContext> = context.dataStore.data.map { p ->
@@ -53,6 +57,18 @@ class SettingsStore(private val context: Context) {
     /** What an hour of your work is worth, for the Purchase simulator's "hours of work" line. Empty means not set. */
     val hourlyRate: Flow<String> = context.dataStore.data.map { it[Keys.hourlyRateCents] ?: "" }
     suspend fun setHourlyRate(text: String) { context.dataStore.edit { it[Keys.hourlyRateCents] = text } }
+
+    // Backup settings
+
+    /** When a copy was last saved outside the app (the reminder to back up counts from here). 0 = never. */
+    val lastBackupAt: Flow<Long> = context.dataStore.data.map { it[Keys.lastBackupAt] ?: 0L }
+    suspend fun setLastBackupAt(ms: Long) { context.dataStore.edit { it[Keys.lastBackupAt] = ms } }
+    val autoBackup: Flow<Boolean> = context.dataStore.data.map { it[Keys.autoBackup] ?: true }
+    suspend fun setAutoBackup(on: Boolean) { context.dataStore.edit { it[Keys.autoBackup] = on } }
+    suspend fun autoBackupNow(): Boolean = autoBackup.first()
+    val sealedPassphrase: Flow<String> = context.dataStore.data.map { it[Keys.sealedPassphrase] ?: "" }
+    suspend fun sealedPassphraseNow(): String = sealedPassphrase.first()
+    suspend fun setSealedPassphrase(text: String) { context.dataStore.edit { it[Keys.sealedPassphrase] = text } }
 
     suspend fun setHidden(hidden: Boolean) { context.dataStore.edit { it[Keys.hideAmounts] = hidden } }
     suspend fun setReportingCurrency(code: String) { context.dataStore.edit { it[Keys.reportingCurrency] = code } }

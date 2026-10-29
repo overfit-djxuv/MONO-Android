@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import app.mono.domain.TxKind
 import app.mono.finance.MonoViewModel
 import app.mono.finance.ui.screens.AccountsScreen
+import app.mono.finance.ui.screens.BackupScreen
 import app.mono.finance.ui.screens.BudgetScreen
 import app.mono.finance.ui.screens.InsightsScreen
 import app.mono.finance.ui.screens.PurchaseSimulatorScreen
@@ -90,6 +91,7 @@ fun MainShell(vm: MonoViewModel) {
     fun pop() { stackText = stack.dropLast(1).joinToString(",") { it.name } }
     BackHandler(enabled = stack.isNotEmpty()) { pop() }
     val config by vm.safeConfig.collectAsState()
+    val lastBackup by vm.lastBackupAt.collectAsState()
     val ledger by vm.ledger.collectAsState()
     val money by vm.moneyContext.collectAsState()
     val c = Mono.colors
@@ -136,14 +138,15 @@ fun MainShell(vm: MonoViewModel) {
                 Route.SIMULATOR -> PurchaseSimulatorScreen(ledger, vm, ::pop)
                 Route.WHATIF -> WhatIfScreen(ledger, vm, ::pop)
                 Route.ACCOUNTS -> AccountsScreen(ledger, vm, ::pop)
-                Route.SETTINGS -> SettingsScreen(vm, ::pop) { push(Route.HISTORY) }
+                Route.SETTINGS -> SettingsScreen(vm, ::pop, { push(Route.HISTORY) }, { push(Route.BACKUP) })
                 Route.HISTORY -> VersionHistoryScreen(::pop)
+                Route.BACKUP -> BackupScreen(vm, ::pop)
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {
                 AppTab.DASHBOARD -> DashboardScreen(
                     ledger = ledger, hidden = money.hidden, onToggleHidden = vm::toggleHidden,
                     onOpenTransactions = { tab = AppTab.TRANSACTIONS }, onAdd = { form = FormTarget.New },
-                    onEdit = { form = FormTarget.Edit(it) }, onOpen = ::push, onOpenGoals = { push(Route.GOALS) }, config = config,
+                    onEdit = { form = FormTarget.Edit(it) }, onOpen = ::push, onOpenGoals = { push(Route.GOALS) }, config = config, lastBackupAt = lastBackup,
                 )
                 AppTab.TRANSACTIONS -> TransactionsScreen(ledger, onEdit = { form = FormTarget.Edit(it) })
                 AppTab.BUDGET -> BudgetScreen(ledger, vm)

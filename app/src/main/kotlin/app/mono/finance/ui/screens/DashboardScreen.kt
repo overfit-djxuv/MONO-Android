@@ -74,6 +74,7 @@ fun DashboardScreen(
     onOpen: (Route) -> Unit = {},
     onOpenGoals: () -> Unit = {},
     config: app.mono.domain.SafeToSpend.Config = app.mono.domain.SafeToSpend.Config(),
+    lastBackupAt: Long = 0,
 ) {
     val c = Mono.colors
     val money = LocalMoneyContext.current
@@ -109,6 +110,13 @@ fun DashboardScreen(
         val insight = DashboardInsight.pick(budget, payments, behind, today)
 
         Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
+            // A reminder when there is data worth protecting and no copy saved outside the app in the last 7 days.
+            val backupDays = if (lastBackupAt == 0L) null else ((System.currentTimeMillis() - lastBackupAt) / 86_400_000L).toInt()
+            if (ledger.transactions.isNotEmpty() && (backupDays == null || backupDays >= 7)) {
+                Row(Modifier.clickableNoRipple { onOpen(Route.BACKUP) }) {
+                    Callout(if (backupDays == null) "No copy of your data is saved outside MONO yet. Tap to save one." else "No copy saved outside MONO in over a week. Tap to save one.", Tone.WARNING)
+                }
+            }
             Hero(cash = books.overview.total, saved = saved, safe = safe, onSafe = { onOpen(Route.SAFE) }, empty = ledger.transactions.isEmpty())
             InsightLine(insight, onOpen)
 

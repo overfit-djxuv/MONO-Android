@@ -31,7 +31,7 @@ import app.mono.finance.ui.theme.Mono
 import app.mono.finance.ui.clickableNoRipple
 
 @Composable
-fun SettingsScreen(vm: MonoViewModel, onBack: () -> Unit, onVersionHistory: () -> Unit) {
+fun SettingsScreen(vm: MonoViewModel, onBack: () -> Unit, onVersionHistory: () -> Unit, onBackup: () -> Unit = {}) {
     val c = Mono.colors
     val money = LocalMoneyContext.current
     var symbol by remember(money.symbolOverride) { mutableStateOf(money.symbolOverride) }
@@ -55,6 +55,16 @@ fun SettingsScreen(vm: MonoViewModel, onBack: () -> Unit, onVersionHistory: () -
                 Switch(checked = money.hidden, onCheckedChange = { vm.toggleHidden() })
             }
             Text("MONO has no internet permission: your records stay on this phone unless you share a file yourself.", color = c.inkTertiary, fontSize = 12.sp)
+        }
+        Column(Modifier.fillMaxWidth().surface()) {
+            SectionTitle("Your data")
+            Row(Modifier.fillMaxWidth().clickableNoRipple(onBackup).padding(vertical = 10.dp)) {
+                Column(Modifier.weight(1f)) {
+                    Text("Backup & recovery", color = c.ink, fontSize = 16.sp)
+                    Text("Save a copy, restore, and protect it with a passphrase", color = c.inkSecondary, fontSize = 12.sp)
+                }
+                Text("›", color = c.inkTertiary, fontSize = 20.sp)
+            }
         }
         Column(Modifier.fillMaxWidth().surface()) {
             SectionTitle("About")

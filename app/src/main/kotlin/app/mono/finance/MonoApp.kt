@@ -5,6 +5,8 @@ import app.mono.domain.Money
 import app.mono.domain.model.Account
 import app.mono.domain.model.DefaultCategories
 import app.mono.finance.data.MonoDatabase
+import app.mono.finance.backup.BackupManager
+import app.mono.finance.data.Repository
 import app.mono.finance.data.SettingsStore
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -20,11 +22,17 @@ class MonoApp : Application() {
         private set
     lateinit var settings: SettingsStore
         private set
+    lateinit var repository: Repository
+        private set
+    lateinit var backups: BackupManager
+        private set
 
     override fun onCreate() {
         super.onCreate()
         db = MonoDatabase.open(this)
         settings = SettingsStore(this)
+        repository = Repository(db)
+        backups = BackupManager(this)
 
         // Keep the global money formatter in step with the settings (reporting currency, symbol, Hide amounts).
         scope.launch { settings.moneyContext.collect { Money.context = it } }
@@ -40,5 +48,8 @@ class MonoApp : Application() {
                 db.dao().put(Account(name = "Main", kindRaw = "bank", currencyCode = Money.reporting.code, createdAt = System.currentTimeMillis()))
             }
         }
+    
+        // One automatic in-app backup a day (never fatal: a failure here must not stop the app opening).
+        scope.launch { try { backups.autoIfDue() } catch (e: Exception) { android.util.Log.w("MONO", "automatic backup skipped", e) } }
     }
 }
