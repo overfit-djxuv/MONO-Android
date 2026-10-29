@@ -3,6 +3,7 @@ package app.mono.finance
 import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import app.mono.domain.CsvImport
 import app.mono.domain.LedgerException
 import app.mono.domain.MoneyContext
 import app.mono.domain.QuickAction
@@ -88,6 +89,14 @@ class MonoViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     // Shopping
+    fun importCsv(plan: CsvImport.Plan, accountID: String?, onDone: () -> Unit = {}) {
+        val cats = ledger.value?.categories ?: return
+        run("Couldn’t import") {
+            val n = repo.applyCsvImport(plan, cats, accountID)
+            _messages.tryEmit("Imported $n ${if (n == 1) "transaction" else "transactions"}")
+            onDone()
+        }
+    }
     fun saveItem(i: ShoppingItem) = run("Couldn’t save the item") { repo.saveItem(i) }
     fun deleteItems(items: List<ShoppingItem>) = run("Couldn’t delete") { repo.deleteItems(items) }
     fun recordPurchase(item: ShoppingItem) {

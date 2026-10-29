@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import app.mono.domain.QuickAction
 import app.mono.domain.TxKind
 import app.mono.finance.MonoViewModel
+import app.mono.finance.ui.screens.CsvImportScreen
 import app.mono.finance.ui.screens.AccountsScreen
 import app.mono.finance.ui.screens.BackupScreen
 import app.mono.finance.ui.screens.BudgetScreen
@@ -157,6 +158,7 @@ fun MainShell(vm: MonoViewModel) {
                 Route.HISTORY -> VersionHistoryScreen(::pop)
                 Route.BACKUP -> BackupScreen(vm, ::pop)
                 Route.THEME -> app.mono.finance.ui.screens.ThemeScreen(vm, ::pop)
+                Route.CSV -> CsvImportScreen(ledger, vm, ::pop)
                 Route.RECEIPTS -> ComingSoon("Receipts", ::pop)
                 Route.BUDGET, Route.GOALS -> {}
             } else when (tab) {

@@ -3,12 +3,14 @@ package app.mono.finance.data
 import androidx.room.withTransaction
 import app.mono.finance.backup.BackupFile
 import kotlinx.coroutines.flow.first
+import app.mono.domain.CsvImport
 import app.mono.domain.FinanceEngine
 import app.mono.domain.LedgerRules
 import app.mono.domain.MonthKey
 import app.mono.domain.model.Account
 import app.mono.domain.model.BudgetLimit
 import app.mono.domain.model.ExchangeRate
+import app.mono.domain.model.MoneyCategory
 import app.mono.domain.model.RecurringRule
 import app.mono.domain.model.ReservedFund
 import app.mono.domain.model.GoalEntry
@@ -30,6 +32,18 @@ class Repository(private val db: MonoDatabase) {
     // Transactions
 
     suspend fun saveTransaction(t: TransactionRecord) = dao.put(t)
+
+    /** Adds the planned rows (and any new categories) in one transaction; nothing existing is edited or deleted. */
+    suspend fun applyCsvImport(plan: CsvImport.Plan, existingCategories: List<MoneyCategory>, accountID: String?, zone: java.time.ZoneId = java.time.ZoneId.systemDefault()): Int = db.withTransaction {
+        var order = (existingCategories.maxOfOrNull { it.sortOrder } ?: 0) + 1
+        plan.newCategories.forEach { dao.put(MoneyCategory(name = it.name, kindRaw = it.kind.raw, sortOrder = order++)) }
+        val rows = plan.rows.map { r ->
+            TransactionRecord(amountCents = r.cents, kindRaw = r.kind.raw, category = r.category, title = r.title, notes = r.notes, accountID = accountID,
+                date = r.date.atTime(12, 0).atZone(zone).toInstant().toEpochMilli())
+        }
+        if (rows.isNotEmpty()) dao.put(*rows.toTypedArray())
+        rows.size
+    }
 
     /** Deleting a generated expense unlinks its source so it can be recorded again deliberately; receipts just become unlinked. */
     suspend fun deleteTransaction(tx: TransactionRecord, items: List<ShoppingItem>, planned: List<PlannedExpense>) = db.withTransaction {

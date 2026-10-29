@@ -34,6 +34,7 @@ private val tryIt = listOf(
     Tool(Route.WHATIF, "Try an idea on paper; nothing is changed"),
 )
 private val app = listOf(
+    Tool(Route.CSV, "Bring in a bank statement or spreadsheet; duplicates are skipped"),
     Tool(Route.BACKUP, "Save a copy, restore, and protect it with a passphrase"),
     Tool(Route.SETTINGS, "Currency, privacy and more"),
 )
