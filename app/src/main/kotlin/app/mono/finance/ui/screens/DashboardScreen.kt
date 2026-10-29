@@ -16,6 +16,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.GridView
+import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
@@ -79,6 +80,7 @@ fun DashboardScreen(
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = Mono.gutter).padding(bottom = 96.dp)) {
         Row(Modifier.fillMaxWidth().padding(top = 12.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
             Text("Dashboard", color = c.ink, fontSize = 30.sp, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f))
+            IconButton(onClick = { onOpen(Route.SETTINGS) }) { Icon(Icons.Outlined.Settings, "Settings", tint = c.inkSecondary) }
             IconButton(onClick = { onOpen(Route.TOOLS) }) { Icon(Icons.Outlined.GridView, "Tools", tint = c.inkSecondary) }
             IconButton(onClick = onToggleHidden) {
                 Icon(if (hidden) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility,
