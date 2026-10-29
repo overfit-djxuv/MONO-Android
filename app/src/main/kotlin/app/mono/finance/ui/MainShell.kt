@@ -18,9 +18,13 @@ import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -33,7 +37,10 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import app.mono.domain.TxKind
 import app.mono.finance.MonoViewModel
+import app.mono.finance.ui.screens.BudgetScreen
 import app.mono.finance.ui.screens.DashboardScreen
+import app.mono.finance.ui.screens.GoalsScreen
+import app.mono.finance.ui.screens.ShoppingScreen
 import app.mono.finance.ui.screens.TransactionForm
 import app.mono.finance.ui.screens.TransactionsScreen
 import app.mono.finance.ui.theme.Mono
@@ -57,13 +64,16 @@ private sealed interface FormTarget {
 @Composable
 fun MainShell(vm: MonoViewModel) {
     var tab by rememberSaveable { mutableStateOf(AppTab.DASHBOARD) }
-    var form by androidx.compose.runtime.remember { mutableStateOf<FormTarget>(FormTarget.None) }
+    var form by remember { mutableStateOf<FormTarget>(FormTarget.None) }
     val ledger by vm.ledger.collectAsState()
     val money by vm.moneyContext.collectAsState()
     val c = Mono.colors
+    val snackbar = remember { SnackbarHostState() }
+    LaunchedEffect(vm) { vm.messages.collect { snackbar.showSnackbar(it) } }
 
     Scaffold(
         containerColor = c.bg,
+        snackbarHost = { SnackbarHost(snackbar) },
         floatingActionButton = {
             if (tab == AppTab.DASHBOARD || tab == AppTab.TRANSACTIONS) {
                 FloatingActionButton(onClick = { form = FormTarget.New }, containerColor = c.primary, contentColor = c.onPrimary) {
@@ -97,7 +107,9 @@ fun MainShell(vm: MonoViewModel) {
                     onEdit = { form = FormTarget.Edit(it) },
                 )
                 AppTab.TRANSACTIONS -> TransactionsScreen(ledger, onEdit = { form = FormTarget.Edit(it) })
-                else -> ComingSoon(tab.title)
+                AppTab.BUDGET -> BudgetScreen(ledger, vm)
+                AppTab.GOALS -> GoalsScreen(ledger, vm)
+                AppTab.SHOPPING -> ShoppingScreen(ledger, vm)
             }
         }
     }
@@ -109,14 +121,5 @@ fun MainShell(vm: MonoViewModel) {
         is FormTarget.Edit -> l.transactions.firstOrNull { it.id == f.id }?.let {
             TransactionForm(l, it, it.kind, vm::saveTransaction, vm::deleteTransaction) { form = FormTarget.None }
         } ?: run { form = FormTarget.None }
-    }
-}
-
-@Composable
-private fun ComingSoon(title: String) {
-    val c = Mono.colors
-    Column(Modifier.fillMaxSize().padding(Mono.gutter), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
-        Text(title, color = c.ink, fontSize = 24.sp, fontWeight = FontWeight.Bold)
-        Text("This screen is being ported from the iPhone app.", color = c.inkSecondary, fontSize = 14.sp, modifier = Modifier.padding(top = 6.dp))
     }
 }

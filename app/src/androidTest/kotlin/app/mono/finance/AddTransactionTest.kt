@@ -50,5 +50,6 @@ class AddTransactionTest {
         assertEquals("expense", saved.kindRaw)
         assertEquals("Food", saved.category)
         assertNotNull("belongs to the default account", saved.accountID)
+        runBlocking { dao.deleteTransaction(saved.id) } // leave the shared emulator data as it was
     }
 }

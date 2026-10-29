@@ -51,9 +51,9 @@ fun TransactionsScreen(ledger: LedgerState?, onEdit: (String) -> Unit) {
         val (income, expense) = FinanceEngine.totals(books.reported, month)
 
         Row(Modifier.fillMaxWidth().padding(horizontal = Mono.gutter), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-            StatTile("Income", fmt(income), tint = c.income, modifier = Modifier.weight(1f))
-            StatTile("Spent", fmt(expense), modifier = Modifier.weight(1f))
-            StatTile("Net", fmt(income - expense, signed = true), modifier = Modifier.weight(1f))
+            StatTile("Income", fmt(income), tint = c.income, modifier = Modifier.weight(1f), valueSize = 15)
+            StatTile("Spent", fmt(expense), modifier = Modifier.weight(1f), valueSize = 15)
+            StatTile("Net", fmt(income - expense, signed = true), modifier = Modifier.weight(1f), valueSize = 15)
         }
 
         if (ledger.transactions.isEmpty()) {

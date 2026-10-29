@@ -9,6 +9,7 @@ import androidx.room.OnConflictStrategy
 import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
+import androidx.room.withTransaction
 import app.mono.domain.model.*
 import kotlinx.coroutines.flow.Flow
 
@@ -33,10 +34,22 @@ interface MonoDao {
     @Query("SELECT COUNT(*) FROM MoneyCategory") suspend fun categoryCount(): Int
     @Query("SELECT COUNT(*) FROM Account") suspend fun accountCount(): Int
     @Query("SELECT COUNT(*) FROM TransactionRecord") suspend fun transactionCount(): Int
+    @Query("SELECT COUNT(*) FROM SavingsGoal") suspend fun goalCount(): Int
+    @Query("SELECT COALESCE(SUM(amountCents), 0) FROM GoalEntry") suspend fun latestGoalEntryTotal(): Long
+    @Query("SELECT * FROM ShoppingItem WHERE name = :name LIMIT 1") suspend fun itemByName(name: String): ShoppingItem
+    @Query("SELECT COUNT(*) FROM ShoppingItem") suspend fun shoppingCount(): Int
     @Query("SELECT * FROM TransactionRecord ORDER BY rowid DESC LIMIT 1") suspend fun latestTransaction(): TransactionRecord
 
     @Delete suspend fun delete(row: TransactionRecord)
     @Query("DELETE FROM TransactionRecord WHERE id = :id") suspend fun deleteTransaction(id: String)
+    @Query("UPDATE Receipt SET transactionID = NULL WHERE transactionID = :id") suspend fun unlinkReceipts(id: String)
+    @Delete suspend fun delete(row: MonthBudget)
+    @Delete suspend fun delete(row: BudgetLimit)
+    @Delete suspend fun delete(row: PlannedExpense)
+    @Delete suspend fun delete(vararg row: ShoppingItem)
+    @Delete suspend fun delete(row: SavingsGoal)
+    @Delete suspend fun delete(vararg row: TripCost)
+    @Delete suspend fun delete(vararg row: GoalEntry)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(vararg row: MoneyCategory)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun put(vararg row: TransactionRecord)

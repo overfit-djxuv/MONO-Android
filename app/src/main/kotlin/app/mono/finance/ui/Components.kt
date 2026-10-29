@@ -126,11 +126,11 @@ fun Hairline() {
 }
 
 @Composable
-fun StatTile(title: String, value: String, tint: Color = Mono.colors.ink, footnote: String? = null, modifier: Modifier = Modifier) {
+fun StatTile(title: String, value: String, tint: Color = Mono.colors.ink, footnote: String? = null, modifier: Modifier = Modifier, valueSize: Int = 20) {
     val c = Mono.colors
     Column(modifier.surface(14.dp), verticalArrangement = Arrangement.spacedBy(2.dp)) {
         Text(title, color = c.inkSecondary, fontSize = 13.sp)
-        Text(value, color = tint, style = figure(20, FontWeight.Medium), maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(value, color = tint, style = figure(valueSize, FontWeight.Medium), maxLines = 1, softWrap = false)
         if (footnote != null) Text(footnote, color = c.inkTertiary, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
